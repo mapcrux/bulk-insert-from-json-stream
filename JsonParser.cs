@@ -13,75 +13,86 @@ using System.Threading.Tasks.Dataflow;
 using static System.Net.Mime.MediaTypeNames;
 using System.Xml;
 
-namespace ConsoleApp3
+namespace BulkInsertFromJsonStream
 {
     public static class JsonParser
     {
         public static async Task Produce(ITargetBlock<Rate> target)
         {
-            await using FileStream file = File.OpenRead("C:\\Users\\mpelland\\source\\repos\\ConsoleApp3\\CMC_Transplant_MRRF.json");
+            await using FileStream file = File.OpenRead("C:\\Users\\codet\\Source\\Repos\\file-prep\\output.json");
+
+            
             IAsyncEnumerable<JsonNode> enumerable = JsonSerializer.DeserializeAsyncEnumerable<JsonNode>(file);
-            await foreach (JsonNode node in enumerable)
+            Console.WriteLine("Beginning Parsing Rates");
+            try
             {
-                var billing_code = node?["billing_code"]?.GetValue<string>()?.Truncate(7);
-                var billing_code_type_version_string = node?["billing_code_type_version"]?.GetValue<string>();
-                var billing_code_type_version = (string.IsNullOrEmpty(billing_code_type_version_string)) ? 0 : Convert.ToInt32(billing_code_type_version_string);
-                var billing_code_type = node?["billing_code_type"]?.GetValue<string>().Truncate(7);
-                var negotiated_rates_node = node?["negotiated_rates"];
-                if (!string.IsNullOrEmpty(billing_code) && negotiated_rates_node != null)
+                await foreach (JsonNode node in enumerable)
                 {
-                    foreach (var rate_node in negotiated_rates_node.AsArray())
+                    var billing_code = node?["billing_code"]?.GetValue<string>()?.Truncate(7);
+                    var billing_code_type_version_string = node?["billing_code_type_version"]?.GetValue<string>();
+                    var billing_code_type_version = (string.IsNullOrEmpty(billing_code_type_version_string)) ? 0 : Convert.ToInt32(billing_code_type_version_string);
+                    var billing_code_type = node?["billing_code_type"]?.GetValue<string>().Truncate(7);
+                    var negotiated_rates_node = node?["negotiated_rates"];
+                    if (!string.IsNullOrEmpty(billing_code) && negotiated_rates_node != null)
                     {
-                        var provider_groups = rate_node?["provider_groups"]?.AsArray();
-                        if (provider_groups != null)
+                        foreach (var rate_node in negotiated_rates_node.AsArray())
                         {
-                            var tins = provider_groups.Select(x =>
-                            new
+                            var provider_groups = rate_node?["provider_groups"]?.AsArray();
+                            if (provider_groups != null)
                             {
-                                tin = x["value"]?.GetValue<string>().Truncate(10),
-                                tin_type = x["type"]?.GetValue<string>().Truncate(3)
-                            });
-                            var negotiated_prices = rate_node?["negotiated_prices"]?.AsArray();
-                            if (negotiated_prices != null)
-                            {
-                                var prices = negotiated_prices.Select(x =>
+                                var tins = provider_groups.Select(x =>
                                 new
                                 {
-                                    negotiated_type = x["negotiated_type"]?.GetValue<string>().Truncate(15),
-                                    negotiated_rate = x["negotiated_rate"]?.GetValue<double>(),
-                                    expiration_date = x["expiration_date"]?.GetValue<string>().ConvertDate(),
-                                    billing_class = x["billing_class"]?.GetValue<string>().Truncate(15)
+                                    tin = x["tin"]["value"]?.GetValue<string>().Truncate(10),
+                                    tin_type = x["tin"]["type"]?.GetValue<string>().Truncate(3)
                                 });
-                                var rates = tins.SelectMany(t => prices, (t, p) => new Rate
+                                var negotiated_prices = rate_node?["negotiated_prices"]?.AsArray();
+                                if (negotiated_prices != null)
                                 {
-                                    BillingClass = p.billing_class,
-                                    BillingCode = billing_code,
-                                    BillingCodeType = billing_code_type,
-                                    BillingCodeTypeVersion = billing_code_type_version,
-                                    ExpirationDate = p.expiration_date,
-                                    NegotiatedRate = p.negotiated_rate,
-                                    NegotiatedType = p.negotiated_type,
-                                    TIN = t.tin,
-                                    TinType = t.tin_type
-                                });
-                                foreach (Rate rate in rates)
-                                {
-                                    target.Post(rate);
+                                    var prices = negotiated_prices.Select(x =>
+                                    new
+                                    {
+                                        negotiated_type = x["negotiated_type"]?.GetValue<string>().Truncate(15),
+                                        negotiated_rate = x["negotiated_rate"]?.GetValue<double>(),
+                                        expiration_date = x["expiration_date"]?.GetValue<string>().ConvertDate(),
+                                        billing_class = x["billing_class"]?.GetValue<string>().Truncate(15)
+                                    });
+                                    var rates = tins.SelectMany(t => prices, (t, p) => new Rate
+                                    {
+                                        BillingClass = p.billing_class,
+                                        BillingCode = billing_code,
+                                        BillingCodeType = billing_code_type,
+                                        BillingCodeTypeVersion = billing_code_type_version,
+                                        ExpirationDate = p.expiration_date,
+                                        NegotiatedRate = p.negotiated_rate,
+                                        NegotiatedType = p.negotiated_type,
+                                        TIN = t.tin,
+                                        TinType = t.tin_type
+                                    });
+                                    foreach (Rate rate in rates)
+                                    {
+                                        target.Post(rate);
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+            catch(Exception e)
+            {
+                Console.WriteLine("Encountered Parse Error");
+            }
             target.Complete();
         }
 
         public static void Consume(Rate[] source)
         {
+            Console.WriteLine($"Inserting batch of {source.Length} Rates");
             var table = RatesToTable(source);
             using (var connection = new SqlConnection())
             {
-                connection.ConnectionString = "Server=(local);Database=testdb;Trusted_Connection=True;";
+                connection.ConnectionString = "Data Source=(localdb)\\MSSQLLocalDB;Initial Catalog=Rates;Integrated Security=True";
                 connection.Open();
                 using (SqlBulkCopy bulkCopy = new SqlBulkCopy(connection))
                 {
@@ -102,10 +113,11 @@ namespace ConsoleApp3
         public static DataTable RatesToTable(Rate[] rates)
         {
             DataTable table = new DataTable("Rates");
+            table.Columns.Add("Id", typeof(Guid));
             table.Columns.Add("Tin", typeof(string));
             table.Columns.Add("TinType", typeof(string));
             table.Columns.Add("BillingCode", typeof(string));
-            table.Columns.Add("BillingCodeType", typeof(int));
+            table.Columns.Add("BillingCodeType", typeof(string));
             table.Columns.Add("BillingCodeTypeVersion", typeof(string));
             table.Columns.Add("NegotiatedType", typeof(string));
             table.Columns.Add("NegotiatedRate", typeof(double));
@@ -114,6 +126,7 @@ namespace ConsoleApp3
             foreach (var rate in rates)
             {
                 DataRow row = table.NewRow();
+                row["Id"] = Guid.NewGuid();
                 row["Tin"] = rate.TIN;
                 row["TinType"] = rate.TinType;
                 row["BillingCode"] = rate.BillingCode;

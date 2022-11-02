@@ -70,3 +70,6 @@ bin/Release/net6.0/ConsoleApp3.pdb
 bin/Release/net6.0/ConsoleApp3.runtimeconfig.json
 .vs/ProjectEvaluation/consoleapp3.metadata.v5.1
 .vs/ProjectEvaluation/consoleapp3.projects.v5.1
+/.vs
+/bin/Debug/net6.0
+/obj/Debug/net6.0

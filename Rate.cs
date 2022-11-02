@@ -5,7 +5,7 @@ using System.Security.Principal;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace ConsoleApp3
+namespace BulkInsertFromJsonStream
 {
     public class Rate
     {

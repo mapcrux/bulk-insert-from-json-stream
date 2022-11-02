@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
-namespace ConsoleApp3
+namespace BulkInsertFromJsonStream
 {
     public class Program
     {
@@ -15,14 +15,15 @@ namespace ConsoleApp3
                 var consumerTask = new ActionBlock<Rate[]>(a =>
                     JsonParser.Consume(a));
                 buffer.LinkTo(consumerTask);
-                buffer.Completion.ContinueWith(delegate { consumerTask.Complete(); });
+                var completion = buffer.Completion.ContinueWith(delegate { consumerTask.Complete(); });
                 await JsonParser.Produce(buffer);
+                Console.WriteLine("Finished Parsing Json");
                 buffer.Complete();
-
-                consumerTask.Completion.Wait();
-                Console.ReadLine();
+                Task.WaitAll(completion, consumerTask.Completion);
+                Console.WriteLine("Finished Writing to DB");
             }
-            catch {
+            catch (Exception e){
+                Console.WriteLine(e.Message);
                 Console.ReadLine();
             }
         }
