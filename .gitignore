@@ -73,3 +73,9 @@ bin/Release/net6.0/ConsoleApp3.runtimeconfig.json
 /.vs
 /bin/Debug/net6.0
 /obj/Debug/net6.0
+/Rates/obj/Debug
+/Rates/Rates.jfm
+/Rates/bin/Debug
+/file-prep/obj
+/file-prep/bin/Debug/net6.0
+/bulk-insert-from-json-stream/obj
