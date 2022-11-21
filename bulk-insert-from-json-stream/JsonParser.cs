@@ -17,10 +17,47 @@ namespace BulkInsertFromJsonStream
 {
     public static class JsonParser
     {
+        private static string ratesFile = "C:\\temp\\rates.json";
+        private static string providersFile = "C:\\temp\\providers.json";
+        private static string connectionString = "Data Source=(localdb)\\MSSQLLocalDB;Initial Catalog=Rates;Integrated Security=True";
+        private static Dictionary<string, Tuple<string,string>> descs = new Dictionary<string, Tuple<string,string>>();
+
+
+        public static async Task<IEnumerable<Provider>> ParseProviders()
+        {
+            await using FileStream file = File.OpenRead(providersFile);
+
+            IAsyncEnumerable<JsonNode> enumerable = JsonSerializer.DeserializeAsyncEnumerable<JsonNode>(file);
+            Console.WriteLine("Beginning Parsing Providers");
+            List<Provider> providers = new List<Provider>();
+            await foreach (JsonNode node in enumerable)
+            {
+                var id = node["provider_group_id"]?.GetValue<int>();
+                var provider_groups = node?["provider_groups"]?.AsArray();
+                if (id != null && provider_groups != null && provider_groups.Count > 0)
+                {
+                    var tinNode = provider_groups[0]?["tin"];
+                    var npiNode = provider_groups[0]?["npi"]?.AsArray();
+                    var provider = new Provider
+                    {
+                        ProviderID = id.Value,
+                        TIN = tinNode["value"]?.GetValue<string>().Truncate(10),
+                        TinType = tinNode["type"]?.GetValue<string>().Truncate(3)
+                    };
+                    if (npiNode != null)
+                    {
+                        provider.NPIs = npiNode.Select(x => x.GetValue<int>());
+                    }
+                    providers.Add(provider);
+                }
+            }
+            Console.WriteLine("Finished Parsing Providers");
+            return providers;
+        }
+
         public static async Task Produce(ITargetBlock<Rate> target)
         {
-            await using FileStream file = File.OpenRead("C:\\Users\\codet\\Source\\Repos\\file-prep\\output.json");
-
+            await using FileStream file = File.OpenRead(ratesFile);
             
             IAsyncEnumerable<JsonNode> enumerable = JsonSerializer.DeserializeAsyncEnumerable<JsonNode>(file);
             Console.WriteLine("Beginning Parsing Rates");
@@ -28,6 +65,9 @@ namespace BulkInsertFromJsonStream
             {
                 await foreach (JsonNode node in enumerable)
                 {
+                    var short_desc = node?["name"]?.GetValue<string>()?.Truncate(50);
+                    var long_desc = node?["description"]?.GetValue<string>()?.Truncate(300);
+                    var negotiated_arrangement = node?["negotiation_arrangement"]?.GetValue<string>()?.Truncate(3);
                     var billing_code = node?["billing_code"]?.GetValue<string>()?.Truncate(7);
                     var billing_code_type_version_string = node?["billing_code_type_version"]?.GetValue<string>();
                     var billing_code_type_version = (string.IsNullOrEmpty(billing_code_type_version_string)) ? 0 : Convert.ToInt32(billing_code_type_version_string);
@@ -37,15 +77,10 @@ namespace BulkInsertFromJsonStream
                     {
                         foreach (var rate_node in negotiated_rates_node.AsArray())
                         {
-                            var provider_groups = rate_node?["provider_groups"]?.AsArray();
+                            var provider_groups = rate_node?["provider_references"]?.AsArray();
                             if (provider_groups != null)
                             {
-                                var tins = provider_groups.Select(x =>
-                                new
-                                {
-                                    tin = x["tin"]["value"]?.GetValue<string>().Truncate(10),
-                                    tin_type = x["tin"]["type"]?.GetValue<string>().Truncate(3)
-                                });
+                                var pids = provider_groups.Select(x => x.GetValue<int>());
                                 var negotiated_prices = rate_node?["negotiated_prices"]?.AsArray();
                                 if (negotiated_prices != null)
                                 {
@@ -53,27 +88,34 @@ namespace BulkInsertFromJsonStream
                                     new
                                     {
                                         negotiated_type = x["negotiated_type"]?.GetValue<string>().Truncate(15),
+                                        service_code = x["service_code"]?.AsArray().ToJsonString().Truncate(15),
+                                        billing_code_modifier = x["billing_code_modifier"]?.AsArray().ToJsonString().Truncate(50),
+                                        additional_information = x["additional_information"]?.GetValue<string>().Truncate(50),
                                         negotiated_rate = x["negotiated_rate"]?.GetValue<double>(),
                                         expiration_date = x["expiration_date"]?.GetValue<string>().ConvertDate(),
                                         billing_class = x["billing_class"]?.GetValue<string>().Truncate(15)
                                     });
-                                    var rates = tins.SelectMany(t => prices, (t, p) => new Rate
+                                    var rates = pids.SelectMany(t => prices, (t, p) => new Rate
                                     {
                                         BillingClass = p.billing_class,
+                                        NegotiatedArrangement = negotiated_arrangement,
                                         BillingCode = billing_code,
                                         BillingCodeType = billing_code_type,
                                         BillingCodeTypeVersion = billing_code_type_version,
                                         ExpirationDate = p.expiration_date,
                                         NegotiatedRate = p.negotiated_rate,
                                         NegotiatedType = p.negotiated_type,
-                                        TIN = t.tin,
-                                        TinType = t.tin_type
+                                        BillingCodeModifier = p.billing_code_modifier,
+                                        AdditionalInformation = p.additional_information,
+                                        ServiceCode = p.service_code,
+                                        ProviderID = t
                                     });
                                     foreach (Rate rate in rates)
                                     {
                                         target.Post(rate);
                                     }
                                 }
+                                //descs[billing_code] = Tuple.Create(short_desc, long_desc);
                             }
                         }
                     }
@@ -83,20 +125,44 @@ namespace BulkInsertFromJsonStream
             {
                 Console.WriteLine("Encountered Parse Error");
             }
+            Console.WriteLine("Finished Parsing Rates");
             target.Complete();
         }
 
         public static void Consume(Rate[] source)
         {
             Console.WriteLine($"Inserting batch of {source.Length} Rates");
-            var table = RatesToTable(source);
+            var table = RatesToDataTable(source);
+            BulkInsert(table, "Rates");
+        }
+
+        public static void InsertCodes()
+        {
+            Console.WriteLine($"Inserting batch of Code Descriptions");
+            DataTable table = new DataTable("Codes");
+            table.Columns.Add("Code", typeof(string));
+            table.Columns.Add("ShortDescription", typeof(string));
+            table.Columns.Add("LongDescription", typeof(string));
+            foreach (var c in descs)
+            {
+                DataRow row = table.NewRow();
+                row["Code"] = c.Key;
+                row["ShortDescription"] = c.Value.Item1;
+                row["LongDescription"] = c.Value.Item2;
+                table.Rows.Add(row);
+            }
+            BulkInsert(table, "Codes");
+        }
+
+        public static void BulkInsert(DataTable table, string tableName)
+        {
             using (var connection = new SqlConnection())
             {
-                connection.ConnectionString = "Data Source=(localdb)\\MSSQLLocalDB;Initial Catalog=Rates;Integrated Security=True";
+                connection.ConnectionString = connectionString;
                 connection.Open();
                 using (SqlBulkCopy bulkCopy = new SqlBulkCopy(connection))
                 {
-                    bulkCopy.DestinationTableName = "Rates";
+                    bulkCopy.DestinationTableName = tableName;
                     bulkCopy.BulkCopyTimeout = 360;
                     try
                     {
@@ -110,12 +176,48 @@ namespace BulkInsertFromJsonStream
             }
         }
 
-        public static DataTable RatesToTable(Rate[] rates)
+        public static DataTable ProvidersToDataTable(IEnumerable<Provider> providers)
+        {
+            Console.WriteLine("Converting Providers to table");
+            DataTable table = new DataTable("Providers");
+            table.Columns.Add("Id", typeof(int));
+            table.Columns.Add("Tin", typeof(string));
+            table.Columns.Add("TinType", typeof(string));
+            foreach (var p in providers)
+            {
+                DataRow row = table.NewRow();
+                row["Id"] = p.ProviderID;
+                row["Tin"] = p.TIN;
+                row["TinType"] = p.TinType;
+                table.Rows.Add(row);
+            }
+            return table;
+        }
+
+        public static DataTable NPIToDataTable(IEnumerable<Provider> providers)
+        {
+            Console.WriteLine("Converting NPI to table");
+            DataTable table = new DataTable("NPI");
+            table.Columns.Add("Npi", typeof(int));
+            table.Columns.Add("ProviderId", typeof(int));
+            foreach (var p in providers)
+            {
+                foreach (var n in p.NPIs)
+                {
+                    DataRow row = table.NewRow();
+                    row["Npi"] = n;
+                    row["ProviderId"] = p.ProviderID;
+                    table.Rows.Add(row);
+                }
+            }
+            return table;
+        }
+
+        public static DataTable RatesToDataTable(Rate[] rates)
         {
             DataTable table = new DataTable("Rates");
             table.Columns.Add("Id", typeof(Guid));
-            table.Columns.Add("Tin", typeof(string));
-            table.Columns.Add("TinType", typeof(string));
+            table.Columns.Add("ProviderId", typeof(int));
             table.Columns.Add("BillingCode", typeof(string));
             table.Columns.Add("BillingCodeType", typeof(string));
             table.Columns.Add("BillingCodeTypeVersion", typeof(string));
@@ -123,12 +225,14 @@ namespace BulkInsertFromJsonStream
             table.Columns.Add("NegotiatedRate", typeof(double));
             table.Columns.Add("ExpirationDate", typeof(DateTime));
             table.Columns.Add("BillingClass", typeof(string));
+            table.Columns.Add("ServiceCode", typeof(string));
+            table.Columns.Add("BillingCodeModifier", typeof(string));
+            table.Columns.Add("AdditionalInformation", typeof(string));
             foreach (var rate in rates)
             {
                 DataRow row = table.NewRow();
                 row["Id"] = Guid.NewGuid();
-                row["Tin"] = rate.TIN;
-                row["TinType"] = rate.TinType;
+                row["ProviderId"] = rate.ProviderID;
                 row["BillingCode"] = rate.BillingCode;
                 row["BillingCodeType"] = rate.BillingCodeType;
                 row["BillingCodeTypeVersion"] = rate.BillingCodeTypeVersion;
@@ -136,11 +240,16 @@ namespace BulkInsertFromJsonStream
                 row["NegotiatedRate"] = rate.NegotiatedRate;
                 row["ExpirationDate"] = rate.ExpirationDate;
                 row["BillingClass"] = rate.BillingClass;
+                row["ServiceCode"] = rate.ServiceCode;
+                row["BillingCodeModifier"] = rate.BillingCodeModifier;
+                row["AdditionalInformation"] = rate.AdditionalInformation;
                 table.Rows.Add(row);
             }
             return table;
         }
     }
+
+
 
     public static class Extensions { 
         public static string Truncate(this string value, int maxLength)
