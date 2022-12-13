@@ -36,19 +36,23 @@ namespace BulkInsertFromJsonStream
                 var provider_groups = node?["provider_groups"]?.AsArray();
                 if (id != null && provider_groups != null && provider_groups.Count > 0)
                 {
-                    var tinNode = provider_groups[0]?["tin"];
-                    var npiNode = provider_groups[0]?["npi"]?.AsArray();
-                    var provider = new Provider
+                    foreach (var provider_group in provider_groups)
                     {
-                        ProviderID = id.Value,
-                        TIN = tinNode["value"]?.GetValue<string>().Truncate(10),
-                        TinType = tinNode["type"]?.GetValue<string>().Truncate(3)
-                    };
-                    if (npiNode != null)
-                    {
-                        provider.NPIs = npiNode.Select(x => x.GetValue<int>());
+                        var tinNode = provider_group["tin"];
+                        var npiNode = provider_group["npi"]?.AsArray();
+                        var provider = new Provider
+                        {
+                            ProviderID = id.Value,
+                            TIN = tinNode["value"]?.GetValue<string>().Truncate(10),
+                            TinType = tinNode["type"]?.GetValue<string>().Truncate(3)
+                        };
+                        if (npiNode != null)
+                        {
+                            provider.NPIs = npiNode.Select(x => x.GetValue<int>());
+                        }
+                        provider.Id = Guid.NewGuid();
+                        providers.Add(provider);
                     }
-                    providers.Add(provider);
                 }
             }
             Console.WriteLine("Finished Parsing Providers");
@@ -176,19 +180,21 @@ namespace BulkInsertFromJsonStream
             }
         }
 
-        public static DataTable ProvidersToDataTable(IEnumerable<Provider> providers)
+        public static DataTable TINToDataTable(IEnumerable<Provider> providers)
         {
-            Console.WriteLine("Converting Providers to table");
-            DataTable table = new DataTable("Providers");
-            table.Columns.Add("Id", typeof(int));
+            Console.WriteLine("Converting TINs to table");
+            DataTable table = new DataTable("TIN");
+            table.Columns.Add("Id", typeof(Guid));
             table.Columns.Add("Tin", typeof(string));
             table.Columns.Add("TinType", typeof(string));
+            table.Columns.Add("ProviderId", typeof(int));
             foreach (var p in providers)
             {
                 DataRow row = table.NewRow();
-                row["Id"] = p.ProviderID;
+                row["Id"] = p.Id;
                 row["Tin"] = p.TIN;
                 row["TinType"] = p.TinType;
+                row["ProviderId"] = p.ProviderID;
                 table.Rows.Add(row);
             }
             return table;
@@ -199,16 +205,30 @@ namespace BulkInsertFromJsonStream
             Console.WriteLine("Converting NPI to table");
             DataTable table = new DataTable("NPI");
             table.Columns.Add("Npi", typeof(int));
-            table.Columns.Add("ProviderId", typeof(int));
+            table.Columns.Add("TINId", typeof(Guid));
             foreach (var p in providers)
             {
                 foreach (var n in p.NPIs)
                 {
                     DataRow row = table.NewRow();
                     row["Npi"] = n;
-                    row["ProviderId"] = p.ProviderID;
+                    row["TINId"] = p.Id;
                     table.Rows.Add(row);
                 }
+            }
+            return table;
+        }
+
+        public static DataTable ProvidersToDataTable(IEnumerable<Provider> providers)
+        {
+            Console.WriteLine("Converting ProviderIds to table");
+            DataTable table = new DataTable("Providers");
+            table.Columns.Add("id", typeof(int));
+            foreach (var p in providers.DistinctBy(c => c.ProviderID).Select(d => d.ProviderID))
+            {
+                DataRow row = table.NewRow();
+                row["Id"] = p;
+                table.Rows.Add(row);
             }
             return table;
         }

@@ -11,6 +11,7 @@ namespace BulkInsertFromJsonStream
     public class Provider
     {
         public int ProviderID { get; set; }
+        public Guid Id { get; set; }
         public string TIN { get; set; }
         public string TinType { get; set; }
         public IEnumerable<int> NPIs { get; set; }

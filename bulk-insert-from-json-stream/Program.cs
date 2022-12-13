@@ -14,9 +14,11 @@ namespace BulkInsertFromJsonStream
                 var providers = await JsonParser.ParseProviders();
                 var providersTable = JsonParser.ProvidersToDataTable(providers);
                 JsonParser.BulkInsert(providersTable, "Providers");
+                var TINTable = JsonParser.TINToDataTable(providers);
+                JsonParser.BulkInsert(TINTable, "TIN");
                 var npiTable = JsonParser.NPIToDataTable(providers);
                 JsonParser.BulkInsert(npiTable, "NPI");
-                var buffer = new BatchBlock<Rate>(10000);
+                var buffer = new BatchBlock<Rate>(50000);
                 var consumerTask = new ActionBlock<Rate[]>(a =>
                     JsonParser.Consume(a));
                 buffer.LinkTo(consumerTask);
