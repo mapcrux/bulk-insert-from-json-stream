@@ -59,8 +59,12 @@
   </ItemGroup>
   <ItemGroup>
     <Build Include="Rates.sql" />
-    <Build Include="Providers.sql" />
+    <Build Include="TIN.sql" />
     <Build Include="NPI.sql" />
     <Build Include="Codes.sql" />
+    <Build Include="Providers.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <RefactorLog Include="Rates.refactorlog" />
   </ItemGroup>
 </Project>
