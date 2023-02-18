@@ -1,6 +1,6 @@
 ﻿CREATE TABLE [dbo].[Rates](
        [Id] UNIQUEIDENTIFIER NOT NULL,
-       [ProviderId] int NOT NULL,
+       [ProviderId] UNIQUEIDENTIFIER NOT NULL,
        [BillingCode] [nvarchar](7) NULL,
        [BillingCodeType] [nvarchar](7) NULL,
        [BillingCodeTypeVersion] [int] NULL,
@@ -11,7 +11,9 @@
        [ServiceCode] [nvarchar](15) NULL,
        [BillingCodeModifier] [nvarchar](50) NULL,
        [AdditionalInformation] [nvarchar](50) NULL,
-    CONSTRAINT [FK_Rates_To_Providers] FOREIGN KEY ([ProviderId]) REFERENCES [Providers]([Id])
+    [ReportingEntityId] UNIQUEIDENTIFIER NOT NULL, 
+    CONSTRAINT [FK_Rates_To_Providers] FOREIGN KEY ([ProviderId]) REFERENCES [Providers]([Id]), 
+    CONSTRAINT [FK_Rates_To_ReportingEntity] FOREIGN KEY ([ReportingEntityId]) REFERENCES [ReportingEntity]([Id])
 ) ON [PRIMARY]
 
 GO

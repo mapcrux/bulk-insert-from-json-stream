@@ -4,13 +4,11 @@ obj/**/*
 
 
 /Rates/Rates.jfm
-/file-prep/obj
-/file-prep/bin
-/bulk-insert-from-json-stream/obj
-/bulk-insert-from-json-stream/bin
 /Rates/Rates.dbmdl
 /Rates/bin
 /Rates/obj
 /Rates/Rates.refactorlog
 /.vscode
-/bulk-insert-from-json-stream/.vscode
+**/obj
+**/bin
+**/.vscode

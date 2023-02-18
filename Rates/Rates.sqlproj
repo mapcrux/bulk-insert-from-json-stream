@@ -63,8 +63,9 @@
     <Build Include="NPI.sql" />
     <Build Include="Codes.sql" />
     <Build Include="Providers.sql" />
-  </ItemGroup>
-  <ItemGroup>
-    <RefactorLog Include="Rates.refactorlog" />
+    <Build Include="ProvidersStage.sql" />
+    <Build Include="NPIStage.sql" />
+    <Build Include="TINStage.sql" />
+    <Build Include="ReportingEntity.sql" />
   </ItemGroup>
 </Project>
