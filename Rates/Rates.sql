@@ -5,7 +5,7 @@
        [BillingCodeType] [nvarchar](7) NULL,
        [BillingCodeTypeVersion] [int] NULL,
        [NegotiatedType] [nvarchar](15) NULL,
-       [NegotiatedRate] [decimal](18, 0) NULL,
+       [NegotiatedRate] [decimal](18, 2) NULL,
        [ExpirationDate] [datetime] NULL,
        [BillingClass] [nvarchar](50) NULL, 
        [ServiceCode] [nvarchar](15) NULL,
