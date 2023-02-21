@@ -1,21 +1,102 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Reflection.Metadata.Ecma335;
 using System.Text;
+using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
+using System.Xml.Linq;
 
 namespace TiCRateParser
 {
-    public class UnitedNetworkParser : INetworkParser
+    public class UnitedRateParser : IRateParser
     {
-        private Dictionary<int, Provider> providers = new Dictionary<int, Provider>();
+        public Dictionary<int, Provider> providers = new Dictionary<int, Provider>();
+        public string reporting_entity_name;
+        public string reporting_entity_type;
+        public DateOnly last_updated_on;
         private string fileLocation;
+        private string processingPath = "./processing.json";
 
-        public UnitedNetworkParser(string fileLocation)
+        public UnitedRateParser(string fileLocation)
         {
             this.fileLocation = fileLocation;
+        }
+
+        public async Task FilePrep()
+        {
+
+            string preamble = "";
+            await using FileStream fileread = File.OpenRead(fileLocation);
+            await using FileStream filewrite = File.Create(processingPath);
+            using (StreamReader reader = new StreamReader(fileread))
+            {
+                using (StreamWriter writer = new StreamWriter(filewrite))
+                {
+                    string? line = reader.ReadLine();
+                    while (!line.TrimStart().StartsWith("\"in_network\""))
+                    {
+                        preamble += line;
+                        line = reader.ReadLine();
+                    }
+                    preamble += "}";
+
+                    writer.WriteLine("[");
+                    do
+                    {
+                        line = reader.ReadLine();
+                        if (reader.Peek() != -1)
+                        {
+                            writer.WriteLine(line);
+                        }
+
+                    } while (line != null);
+                }
+            }
+            ParsePreamble(preamble);
+        }
+
+        public void ParsePreamble(string preambleString)
+        {
+            var preambleNode = JsonNode.Parse(preambleString);
+            reporting_entity_name = preambleNode?["reporting_entity_name"]?.GetValue<string>()?.Truncate(100);
+            reporting_entity_type = preambleNode?["reporting_entity_type"]?.GetValue<string>()?.Truncate(50);
+            var last_updated_on_node = preambleNode?["last_updated_on"]?.GetValue<string>();
+            if(last_updated_on_node != null && last_updated_on_node.Length == 10)
+            {
+                last_updated_on = DateOnly.Parse(last_updated_on_node);
+            }
+            var provider_node = preambleNode?["provider_references"];
+            if (provider_node != null)
+            {
+                providers = ParseProviderSection.ParseProviderArray(provider_node.AsArray());
+            }
+        }
+
+        public async Task Produce(ITargetBlock<Rate> target)
+        {
+            await using FileStream file = File.OpenRead(processingPath);
+            IAsyncEnumerable<JsonNode> enumerable = JsonSerializer.DeserializeAsyncEnumerable<JsonNode>(file);
+            try
+            {
+                await foreach (JsonNode node in enumerable)
+                {
+                    var rates = ParseRatesForCode(node);
+                    foreach (Rate r in rates)
+                        target.Post(r);
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Encountered Parse Error");
+            }
+            Console.WriteLine("Finished Parsing Rates");
+            target.Complete();
         }
 
         public IEnumerable<Rate> ParseRatesForCode(JsonNode node)
@@ -61,7 +142,7 @@ namespace TiCRateParser
                                 NegotiatedType = p.negotiated_type,
                                 BillingCodeModifier = p.billing_code_modifier,
                                 AdditionalInformation = p.additional_information,
-                                ProviderID = t
+                                ProviderID = providers[t].Id
                             });
                         }
                     }

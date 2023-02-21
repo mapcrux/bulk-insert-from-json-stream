@@ -67,5 +67,6 @@
     <Build Include="NPIStage.sql" />
     <Build Include="TINStage.sql" />
     <Build Include="ReportingEntity.sql" />
+    <Build Include="UpsertReportingEntityRecord.sql" />
   </ItemGroup>
 </Project>

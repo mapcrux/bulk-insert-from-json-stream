@@ -19,6 +19,33 @@ namespace TiCRateParser
     {
         private static string connectionString = "Data Source=(localdb)\\MSSQLLocalDB;Initial Catalog=Rates;Integrated Security=True";
 
+        public static Guid InsertReportingEntity(string entityName, string entityType, DateOnly entityUpdateDate)
+        {
+            Guid id = Guid.NewGuid();
+            using (var connection = new SqlConnection())
+            {
+                connection.ConnectionString = connectionString;
+                connection.Open();
+                using (SqlCommand cmd = new SqlCommand("UpsertReportingEntityRecord", connection))
+                {
+                    cmd.CommandType = CommandType.StoredProcedure;
+                    cmd.Parameters.Add("@entityName", SqlDbType.VarChar).Value = entityName;
+                    cmd.Parameters.Add("@entityNameType", SqlDbType.VarChar).Value =entityType;
+                    cmd.Parameters.Add("@id", SqlDbType.UniqueIdentifier).Value = id;
+                    cmd.Parameters.Add("@entityDate", SqlDbType.Date).Value = entityUpdateDate;
+                    connection.Open();
+                    object o = cmd.ExecuteScalar();
+                    if (o != null)
+                    {
+                        id = (Guid) o;
+                        Console.WriteLine($"Record inserted successfully. ID = {id}" );
+                    }
+                    connection.Close();
+                }
+            }
+            return id;
+        }
+
         public static void BulkInsert(DataTable table, string tableName)
         {
             using (var connection = new SqlConnection())
@@ -48,14 +75,14 @@ namespace TiCRateParser
             table.Columns.Add("Id", typeof(Guid));
             table.Columns.Add("Tin", typeof(string));
             table.Columns.Add("TinType", typeof(string));
-            table.Columns.Add("ProviderId", typeof(int));
+            table.Columns.Add("ProviderId", typeof(Guid));
             foreach (var p in providers)
             {
                 DataRow row = table.NewRow();
                 row["Id"] = p.Id;
                 row["Tin"] = p.TIN;
                 row["TinType"] = p.TinType;
-                row["ProviderId"] = p.ProviderID;
+                row["ProviderId"] = p.Id;
                 table.Rows.Add(row);
             }
             return table;
@@ -84,7 +111,7 @@ namespace TiCRateParser
         {
             Console.WriteLine("Converting ProviderIds to table");
             DataTable table = new DataTable("Providers");
-            table.Columns.Add("id", typeof(int));
+            table.Columns.Add("id", typeof(Guid));
             foreach (var p in providers.DistinctBy(c => c.ProviderID).Select(d => d.ProviderID))
             {
                 DataRow row = table.NewRow();
@@ -94,7 +121,7 @@ namespace TiCRateParser
             return table;
         }
 
-        public static DataTable RatesToDataTable(Rate[] rates)
+        public static DataTable RatesToDataTable(Rate[] rates, Guid EntityID)
         {
             DataTable table = new DataTable("Rates");
             table.Columns.Add("Id", typeof(Guid));

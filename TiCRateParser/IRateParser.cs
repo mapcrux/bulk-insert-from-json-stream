@@ -2,13 +2,12 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
-using System.Xml.Linq;
 
 namespace TiCRateParser
 {
-    public interface INetworkParser
+    public interface IRateParser
     {
-        Task<IEnumerable<Rate>> ParseRates(XNode node);
     }
 }
