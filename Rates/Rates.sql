@@ -8,7 +8,6 @@
        [NegotiatedRate] [decimal](18, 2) NULL,
        [ExpirationDate] [datetime] NULL,
        [BillingClass] [nvarchar](50) NULL, 
-       [ServiceCode] [nvarchar](15) NULL,
        [BillingCodeModifier] [nvarchar](50) NULL,
        [AdditionalInformation] [nvarchar](50) NULL,
        [ReportingEntityId] UNIQUEIDENTIFIER NOT NULL, 

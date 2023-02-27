@@ -74,7 +74,7 @@ namespace TiCRateParser
             var npiDataTable = NPIToDataTable(providers.DistinctBy(x => x.Id));
             BulkInsert(npiDataTable, "NPIStage");
             CopyProviders();
-            //TruncateProviderStage();
+            TruncateProviderStage();
         }
         
         public void InsertRates(Rate[] rates, Guid entityId)

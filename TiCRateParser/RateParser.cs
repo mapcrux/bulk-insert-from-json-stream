@@ -75,7 +75,7 @@ namespace TiCRateParser
 
         public IEnumerable<Rate> ParseRatesForCode(JsonNode node)
         {
-            IEnumerable<Rate> rates = new List<Rate>();
+            List<Rate> rates = new List<Rate>();
             var negotiated_arrangement = node?["negotiation_arrangement"]?.GetValue<string>()?.Truncate(3);
             var billing_code = node?["billing_code"]?.GetValue<string>()?.Truncate(7);
             var billing_code_type_version_string = node?["billing_code_type_version"]?.GetValue<string>();
@@ -114,7 +114,7 @@ namespace TiCRateParser
                             expiration_date = x["expiration_date"]?.GetValue<string>().ConvertDate(),
                             billing_class = x["billing_class"]?.GetValue<string>().Truncate(15)
                         });
-                        rates = pids.SelectMany(t => prices, (t, p) => new Rate
+                        rates.AddRange(pids.SelectMany(t => prices, (t, p) => new Rate
                         {
                             BillingClass = p.billing_class,
                             NegotiatedArrangement = negotiated_arrangement,
@@ -127,7 +127,7 @@ namespace TiCRateParser
                             BillingCodeModifier = p.billing_code_modifier,
                             AdditionalInformation = p.additional_information,
                             Provider = t.Id
-                        });
+                        }));
                     }
 
                 }
