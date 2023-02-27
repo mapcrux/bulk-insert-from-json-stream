@@ -14,8 +14,5 @@ AS
 	if @existingId is null
 	begin
 		insert into ReportingEntity (Id, [Name], [Type], [UpdateDate]) values (@id, @entityName, @entityNameType, @entityDate)
-	end
-	else
-	begin
 		set @existingId = @id
 	end

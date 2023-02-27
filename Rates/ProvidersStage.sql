@@ -1,4 +1,0 @@
-﻿CREATE TABLE [dbo].[ProvidersStage]
-(
-	[Id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY
-)

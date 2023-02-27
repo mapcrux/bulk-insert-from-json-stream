@@ -1,4 +1,0 @@
-﻿CREATE TABLE [dbo].[Providers]
-(
-	[Id] UNIQUEIDENTIFIER NOT NULL PRIMARY KEY
-)
