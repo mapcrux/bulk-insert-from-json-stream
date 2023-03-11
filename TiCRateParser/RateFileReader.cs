@@ -1,85 +1,40 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
-using System.Text.Json;
+﻿using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
+using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
-using System.Threading.Tasks;
+using System.Threading.Tasks.Dataflow;
 
 namespace TiCRateParser
 {
-    public class RateFileReader : IRateReader
+    public class RateFileReader : RateReader, IRateFileReader
     {
-        public string processingPath { get; set; }
-        public bool streamingParserRequired { get; set; }
+        private readonly ILogger logger;
+        private readonly IProviderParser providerParser;
+        private readonly IRateParser rateParser;
 
-        public RateFileReader()
+        public RateFileReader(ILogger<RateReader> logger, IProviderParser providerParser, IRateParser rateParser)
         {
-            this.processingPath = "./processing.json";
+            this.logger = logger;
+            this.providerParser = providerParser;
+            this.rateParser = rateParser;
         }
 
-        public RateFileReader(string processingPath)
-        {
-            this.processingPath = processingPath;
-        }
-
-        public async Task<JsonNode> ReadFile(string path)
+        public async Task<ReportingEntity> ReadFile(string path, ITargetBlock<Provider> providerTarget, ITargetBlock<Rate> rateTarget)
         {
             try
             {
-                FileInfo fi = new FileInfo(path);
-                if (fi.Length > 1073741824)
-                {
-                    streamingParserRequired = true;
-                    return await FilePrep(path);
-                }
-                else
-                {
-                    streamingParserRequired = false;
-                    await using FileStream fileread = File.OpenRead(path);
-                    return JsonNode.Parse(fileread, new JsonNodeOptions { }, new JsonDocumentOptions { AllowTrailingCommas = true });
-                }
+                ReportingEntity entity = new ReportingEntity();
+                await using FileStream fileread = File.OpenRead(path);
+                using StreamReader streamReader = new StreamReader(fileread);
+                using var jsonReader = new JsonTextReader(streamReader);
+                await ParseStream(jsonReader, entity, providerTarget, rateTarget);
+                return entity;
             }
             catch (Exception e)
             {
-                Console.WriteLine($"Error encountered while reading and parsing file: {e}");
+                logger.LogError(e, "Error encountered while reading file");
                 return null;
             }
-        }
-
-        private async Task<JsonNode> FilePrep(string path)
-        {
-
-            string preamble = "";
-            await using FileStream fileread = File.OpenRead(path);
-            await using FileStream filewrite = File.Create(processingPath);
-            using (StreamReader reader = new StreamReader(fileread))
-            {
-                using (StreamWriter writer = new StreamWriter(filewrite))
-                {
-                    string? line = reader.ReadLine();
-                    while (!line.TrimStart().StartsWith("\"in_network\""))
-                    {
-                        preamble += line;
-                        line = reader.ReadLine();
-                    }
-                    preamble += "}";
-
-                    writer.WriteLine("[");
-                    do
-                    {
-                        line = reader.ReadLine();
-                        if (reader.Peek() != -1)
-                        {
-                            writer.WriteLine(line);
-                        }
-
-                    } while (line != null);
-                }
-            }
-            var preambleNode = JsonNode.Parse(preamble, new JsonNodeOptions { }, new JsonDocumentOptions { AllowTrailingCommas = true });
-            return preambleNode;
         }
     }
 }

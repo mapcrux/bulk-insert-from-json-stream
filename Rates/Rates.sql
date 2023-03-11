@@ -10,9 +10,7 @@
        [BillingClass] [nvarchar](50) NULL, 
        [BillingCodeModifier] [nvarchar](50) NULL,
        [AdditionalInformation] [nvarchar](50) NULL,
-       [ReportingEntityId] UNIQUEIDENTIFIER NOT NULL, 
-       CONSTRAINT [FK_Rates_To_Providers] FOREIGN KEY ([ProviderId]) REFERENCES [Provider]([Id]), 
-       CONSTRAINT [FK_Rates_To_ReportingEntity] FOREIGN KEY ([ReportingEntityId]) REFERENCES [ReportingEntity]([Id])
+       [ReportingEntityId] UNIQUEIDENTIFIER NOT NULL
 ) ON [PRIMARY]
 
 GO

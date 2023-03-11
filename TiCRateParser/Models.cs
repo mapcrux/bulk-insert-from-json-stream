@@ -10,6 +10,18 @@ using System.Threading.Tasks;
 namespace TiCRateParser
 {
 
+    public class ReportingEntity
+    {
+        public string? Name { get; set; }
+        public string? Type { get; set; }
+        public DateOnly LastUpdatedOn { get; set; }
+        public Guid Id { get; }
+        public ReportingEntity()
+        {
+            Id = new Guid();
+        }
+    }
+
     public class Provider
     {
         public string TIN { get; set; }
@@ -18,27 +30,17 @@ namespace TiCRateParser
         public readonly Guid Id;
         public Provider(string tin, string tintype, IEnumerable<int> npis)
         {
-            this.TIN = tin;
-            this.TinType = tintype;
-            this.NPIs = npis;
+            TIN = tin;
+            TinType = tintype;
+            NPIs = npis;
             Id = this.ComputeHash();
-        }
-    }
-
-    public class ProviderGroup
-    {
-        public IEnumerable<Provider> providers;
-        public readonly Guid Id;
-        public ProviderGroup(IEnumerable<Provider> providers)
-        {
-            this.providers = providers;
-            Id = providers.ComputeHash();
         }
     }
 
     public class Rate
     {
         public Guid Provider { get; set; }
+        public Guid ReportingEntity { get; set; }
         public string BillingCode { get; set; }
         public string BillingCodeType { get; set; }
         public int BillingCodeTypeVersion { get; set; }

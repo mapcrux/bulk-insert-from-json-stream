@@ -62,7 +62,7 @@
     <Build Include="NPIStage.sql" />
     <Build Include="ProviderStage.sql" />
     <Build Include="ReportingEntity.sql" />
-    <Build Include="UpsertReportingEntityRecord.sql" />
+    <Build Include="InsertReportingEntityRecord.sql" />
     <Build Include="TruncateProviderStage.sql" />
     <Build Include="CopyProviders.sql" />
   </ItemGroup>

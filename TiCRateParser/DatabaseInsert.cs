@@ -12,74 +12,79 @@ using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using static System.Net.Mime.MediaTypeNames;
 using System.Xml;
+using Microsoft.Extensions.Logging;
 
 namespace TiCRateParser
 {
-    public class DatabaseInsert
+    public interface IDatabaseInsert
+    {
+        void InsertProviderSection(IEnumerable<Provider> providers);
+        void InsertRates(Rate[] rates, Guid entityId);
+        void InsertReportingEntity(ReportingEntity entity);
+    }
+
+    public class DatabaseInsert : IDatabaseInsert
     {
         private string connectionString;
-        public DatabaseInsert()
+        private ILogger logger;
+        public DatabaseInsert(ILogger<DatabaseInsert> logger)
         {
-            this.connectionString = "Data Source=(localdb)\\MSSQLLocalDB;Initial Catalog=Rates;Integrated Security=True";
+            this.logger = logger;
+            connectionString = "Data Source=(localdb)\\MSSQLLocalDB;Initial Catalog=Rates;Integrated Security=True";
         }
 
-        public DatabaseInsert(string connectionString)
+        public DatabaseInsert(ILogger logger, string connectionString)
         {
+            this.logger = logger;
             this.connectionString = connectionString;
         }
 
-        public Guid InsertReportingEntity(string entityName, string entityType, DateOnly entityUpdateDate)
+        public void InsertReportingEntity(ReportingEntity entity)
         {
             try
             {
-                Guid id = Guid.NewGuid();
                 using (var connection = new SqlConnection())
                 {
                     connection.ConnectionString = connectionString;
-                    if(connection.State != ConnectionState.Open)
+                    if (connection.State != ConnectionState.Open)
                         connection.Open();
                     using (SqlCommand cmd = new SqlCommand("UpsertReportingEntityRecord", connection))
                     {
-                        SqlParameter existingIdParameter = new SqlParameter("@existingId", SqlDbType.UniqueIdentifier) {Direction = ParameterDirection.Output};
                         cmd.CommandType = CommandType.StoredProcedure;
-                        cmd.Parameters.Add("@entityName", SqlDbType.VarChar).Value = entityName;
-                        cmd.Parameters.Add("@entityNameType", SqlDbType.VarChar).Value = entityType;
-                        cmd.Parameters.Add("@id", SqlDbType.UniqueIdentifier).Value = id;
-                        cmd.Parameters.Add(existingIdParameter);
-                        cmd.Parameters.Add("@entityDate", SqlDbType.Date).Value = entityUpdateDate.ToDateTime(TimeOnly.MinValue);
+                        cmd.Parameters.Add("@entityName", SqlDbType.VarChar).Value = entity.Name;
+                        cmd.Parameters.Add("@entityNameType", SqlDbType.VarChar).Value = entity.Type;
+                        cmd.Parameters.Add("@id", SqlDbType.UniqueIdentifier).Value = entity.Id;
+                        cmd.Parameters.Add("@entityDate", SqlDbType.Date).Value = entity.LastUpdatedOn.ToDateTime(TimeOnly.MinValue);
                         cmd.ExecuteNonQuery();
-                        if(existingIdParameter.Value == null)
-                        {
-                            throw new Exception("Failed to add reporting entity to DB");
-                        }
-                        id = (Guid)existingIdParameter.Value;
-                        Console.WriteLine($"ReportingEntity inserted successfully. ID = {id}");
+                        logger.LogInformation($"ReportingEntity inserted successfully. ID = {entity.Id}, {entity.Name}, {entity.LastUpdatedOn}");
                         connection.Close();
                     }
                 }
-                return id;
             }
-            catch(Exception e)
+            catch (Exception e)
             {
-                Console.WriteLine("Error writing Reporting Entity to DB" + e.Message);
+                logger.LogError(e, "Error writing Reporting Entity to DB");
                 throw;
             }
         }
 
         public void InsertProviderSection(IEnumerable<Provider> providers)
         {
+            logger.LogInformation("Truncating Provider Staging Tables");
             TruncateProviderStage();
-            var providerTable = ProviderToDataTable(providers.DistinctBy(x=>x.Id));
+            logger.LogInformation("Inserting into Provider Staging Tables");
+            var providerTable = ProviderToDataTable(providers.DistinctBy(x => x.Id));
             BulkInsert(providerTable, "ProviderStage");
             var npiDataTable = NPIToDataTable(providers.DistinctBy(x => x.Id));
             BulkInsert(npiDataTable, "NPIStage");
+            logger.LogInformation("Copying from Provider Staging Tables to");
             CopyProviders();
             TruncateProviderStage();
         }
-        
+
         public void InsertRates(Rate[] rates, Guid entityId)
         {
-            Console.WriteLine($"Inserting batch of {rates.Length} Rates");
+            logger.LogDebug($"Inserting batch of {rates.Length} Rates");
             var table = RatesToDataTable(rates, entityId);
             BulkInsert(table, "Rates");
         }
@@ -133,7 +138,7 @@ namespace TiCRateParser
                     }
                     catch (Exception e)
                     {
-                        Console.WriteLine($"Error inserting {tableName} to database: {e.Message}");
+                        logger.LogError(e, $"Error inserting {tableName} to database");
                         throw;
                     }
                     finally
@@ -146,7 +151,7 @@ namespace TiCRateParser
 
         private DataTable ProviderToDataTable(IEnumerable<Provider> providers)
         {
-            Console.WriteLine("Converting TINs to table");
+            logger.LogInformation("Converting TINs to table");
             DataTable table = new DataTable("ProviderStage");
             table.Columns.Add("Id", typeof(Guid));
             table.Columns.Add("Tin", typeof(string));
@@ -164,7 +169,7 @@ namespace TiCRateParser
 
         private DataTable NPIToDataTable(IEnumerable<Provider> providers)
         {
-            Console.WriteLine("Converting NPI to table");
+            logger.LogInformation("Converting NPI to table");
             DataTable table = new DataTable("NPIStage");
             table.Columns.Add("Npi", typeof(int));
             table.Columns.Add("ProviderId", typeof(Guid));
