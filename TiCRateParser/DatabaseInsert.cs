@@ -18,9 +18,11 @@ namespace TiCRateParser
 {
     public interface IDatabaseInsert
     {
-        void InsertProviderSection(IEnumerable<Provider> providers);
-        void InsertRates(Rate[] rates, Guid entityId);
+        void InsertProviderSection(Provider[] providers);
+        void InsertRates(Rate[] rates);
         void InsertReportingEntity(ReportingEntity entity);
+        void CopyProvidersFromStage();
+        void TruncateProviderStage();
     }
 
     public class DatabaseInsert : IDatabaseInsert
@@ -33,7 +35,7 @@ namespace TiCRateParser
             connectionString = "Data Source=(localdb)\\MSSQLLocalDB;Initial Catalog=Rates;Integrated Security=True";
         }
 
-        public DatabaseInsert(ILogger logger, string connectionString)
+        public DatabaseInsert(ILogger<DatabaseInsert> logger, string connectionString)
         {
             this.logger = logger;
             this.connectionString = connectionString;
@@ -68,24 +70,26 @@ namespace TiCRateParser
             }
         }
 
-        public void InsertProviderSection(IEnumerable<Provider> providers)
+        public void InsertProviderSection(Provider[] providers)
         {
-            logger.LogInformation("Truncating Provider Staging Tables");
-            TruncateProviderStage();
             logger.LogInformation("Inserting into Provider Staging Tables");
             var providerTable = ProviderToDataTable(providers.DistinctBy(x => x.Id));
             BulkInsert(providerTable, "ProviderStage");
             var npiDataTable = NPIToDataTable(providers.DistinctBy(x => x.Id));
             BulkInsert(npiDataTable, "NPIStage");
-            logger.LogInformation("Copying from Provider Staging Tables to");
+        }
+
+        public void CopyProvidersFromStage()
+        {
+            logger.LogInformation("Copying from Provider Staging Tables");
             CopyProviders();
             TruncateProviderStage();
         }
 
-        public void InsertRates(Rate[] rates, Guid entityId)
+        public void InsertRates(Rate[] rates)
         {
             logger.LogDebug($"Inserting batch of {rates.Length} Rates");
-            var table = RatesToDataTable(rates, entityId);
+            var table = RatesToDataTable(rates);
             BulkInsert(table, "Rates");
         }
 
@@ -105,7 +109,7 @@ namespace TiCRateParser
             }
         }
 
-        private void TruncateProviderStage()
+        public void TruncateProviderStage()
         {
             using (var connection = new SqlConnection())
             {
@@ -186,7 +190,7 @@ namespace TiCRateParser
             return table;
         }
 
-        private DataTable RatesToDataTable(Rate[] rates, Guid entityID)
+        private DataTable RatesToDataTable(Rate[] rates)
         {
             DataTable table = new DataTable("Rates");
             table.Columns.Add("Id", typeof(Guid));
@@ -215,7 +219,7 @@ namespace TiCRateParser
                 row["BillingClass"] = rate.BillingClass;
                 row["BillingCodeModifier"] = rate.BillingCodeModifier;
                 row["AdditionalInformation"] = rate.AdditionalInformation;
-                row["ReportingEntityId"] = entityID;
+                row["ReportingEntityId"] = rate.ReportingEntity;
                 table.Rows.Add(row);
             }
             return table;

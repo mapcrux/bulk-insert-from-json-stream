@@ -43,7 +43,7 @@ namespace TiCRateParser
         public Guid ReportingEntity { get; set; }
         public string BillingCode { get; set; }
         public string BillingCodeType { get; set; }
-        public int BillingCodeTypeVersion { get; set; }
+        public string BillingCodeTypeVersion { get; set; }
         public string NegotiatedType { get; set; }
         public double? NegotiatedRate { get; set; }
         public DateTime? ExpirationDate { get; set; }

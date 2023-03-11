@@ -12,6 +12,10 @@ using System.Threading.Tasks;
 
 namespace TiCRateParser
 {
+    public interface IRateUrlReader
+    {
+
+    }
     public class RateUrlReader : IRateUrlReader
     {
         private HttpClient client;

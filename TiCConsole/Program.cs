@@ -23,10 +23,14 @@ namespace TiCConsole
                     services.AddHostedService<ConsoleHostedService>();
                     services.AddSingleton<IRateUrlReader, RateUrlReader>();
                     services.AddSingleton<IRateFileReader, RateFileReader>();
+                    services.AddSingleton<IRateReader, RateReader>();
                     services.AddSingleton<IRateService, RateService>();
                     services.AddSingleton<IProviderParser, ProviderParser>();
                     services.AddSingleton<IRateParser, RateParser>();
-                    services.AddSingleton<IDatabaseInsert, DatabaseInsert>();
+                    services.AddSingleton<IDatabaseInsert>(x => new DatabaseInsert(
+                        x.GetService<ILogger<DatabaseInsert>>(),
+                        "Data Source=(localdb)\\MSSQLLocalDB;Initial Catalog=Rates;Integrated Security=True"
+                        ));
                 })
                 .ConfigureLogging((_, logging) =>
                 {

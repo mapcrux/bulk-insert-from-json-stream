@@ -6,29 +6,26 @@ using System.Threading.Tasks.Dataflow;
 
 namespace TiCRateParser
 {
-    public class RateFileReader : RateReader, IRateFileReader
+    public interface IRateFileReader
+    {
+        Task<JsonTextReader> ReadFile(string path);
+    }
+
+    public class RateFileReader : IRateFileReader
     {
         private readonly ILogger logger;
-        private readonly IProviderParser providerParser;
-        private readonly IRateParser rateParser;
-
-        public RateFileReader(ILogger<RateReader> logger, IProviderParser providerParser, IRateParser rateParser)
+        public RateFileReader(ILogger<RateReader> logger)
         {
             this.logger = logger;
-            this.providerParser = providerParser;
-            this.rateParser = rateParser;
         }
 
-        public async Task<ReportingEntity> ReadFile(string path, ITargetBlock<Provider> providerTarget, ITargetBlock<Rate> rateTarget)
+        public async Task<JsonTextReader> ReadFile(string path)
         {
             try
             {
-                ReportingEntity entity = new ReportingEntity();
-                await using FileStream fileread = File.OpenRead(path);
-                using StreamReader streamReader = new StreamReader(fileread);
-                using var jsonReader = new JsonTextReader(streamReader);
-                await ParseStream(jsonReader, entity, providerTarget, rateTarget);
-                return entity;
+                FileStream fileread = File.OpenRead(path);
+                StreamReader streamReader = new StreamReader(fileread);
+                return new JsonTextReader(streamReader);
             }
             catch (Exception e)
             {
