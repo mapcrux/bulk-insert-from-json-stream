@@ -1,4 +1,5 @@
 ﻿using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -14,7 +15,7 @@ namespace TiCRateParser
 {
     public interface IRateUrlReader
     {
-
+        Task<JsonTextReader> DownloadFile(string url);
     }
     public class RateUrlReader : IRateUrlReader
     {
@@ -25,32 +26,26 @@ namespace TiCRateParser
         {
             this.logger = logger;
             client = new HttpClient();
+            client.Timeout = new TimeSpan(12, 0, 0);
             client.DefaultRequestHeaders.Add("User-Agent", "Chrome/109.0.0.0");
         }
 
 
-        //public async Task<JsonNode> DownloadFile(string path)
-        //{
-        //    try
-        //    {
-        //        using (HttpResponseMessage response = await client.GetAsync(path))
-        //        using (Stream stream = await response.Content.ReadAsStreamAsync())
-        //        {
-        //            using (var decompressor = new GZipStream(stream, CompressionMode.Decompress))
-        //            {
-        //                using (StreamReader sr = new StreamReader(decompressor))
-        //                {
-                            
-        //                }
-        //            }
-        //            return JsonNode.Parse(decompressor, new JsonNodeOptions { }, new JsonDocumentOptions { AllowTrailingCommas = true });
-        //        }
-        //    }
-        //    catch (Exception e)
-        //    {
-        //        logger.LogError(e, "Error encountered while downloading,unzipping or parsing file");
-        //        return null;
-        //    }
-        //}
+        public async Task<JsonTextReader> DownloadFile(string url)
+        {
+            try
+            {
+                HttpResponseMessage response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+                Stream stream = await response.Content.ReadAsStreamAsync();
+                var decompressor = new GZipStream(stream, CompressionMode.Decompress);
+                StreamReader streamReader = new StreamReader(decompressor);
+                return new JsonTextReader(streamReader);
+            }
+            catch (Exception e)
+            {
+                logger.LogError(e, "Error encountered while downloading or unzipping url");
+                return null;
+            }
+        }
     }
 }

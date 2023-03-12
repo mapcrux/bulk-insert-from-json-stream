@@ -88,7 +88,7 @@ namespace TiCRateParser
 
         public void InsertRates(Rate[] rates)
         {
-            logger.LogDebug($"Inserting batch of {rates.Length} Rates");
+            logger.LogInformation($"Inserting batch of {rates.Length} Rates");
             var table = RatesToDataTable(rates);
             BulkInsert(table, "Rates");
         }

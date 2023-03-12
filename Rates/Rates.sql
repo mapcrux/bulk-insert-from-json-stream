@@ -14,3 +14,12 @@
 ) ON [PRIMARY]
 
 GO
+
+CREATE INDEX [ReportingEntityId_Index] ON [dbo].[Rates] (ReportingEntityId)
+
+
+GO
+
+CREATE INDEX [ProviderId_Index] ON [dbo].[Rates] (ProviderId)
+
+GO

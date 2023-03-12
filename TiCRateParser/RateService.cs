@@ -39,9 +39,9 @@ namespace TiCRateParser
             int totalCount = 0;
             foreach (var file in filePaths)
             {
+                //Read File
                 try
                 {
-                    //Read File
                     using JsonTextReader jsonReader = await fileReader.ReadFile(file);
                     int rateCount = await ImportRatesFromStream(jsonReader);
                     logger.LogInformation($"Inserted {rateCount} rates for file: {file}");
@@ -49,7 +49,7 @@ namespace TiCRateParser
                 }
                 catch(Exception e)
                 {
-                    logger.LogError(e, "Unhandled exception in parsing");
+                    logger.LogError(e, $"Unhandled exception in parsing {file}");
                 }
             }
             return totalCount;
@@ -82,7 +82,7 @@ namespace TiCRateParser
             providerBuffer.Complete();
             rateBuffer.Complete();
             Task.WaitAll(rateCompletion, rateConsumer.Completion, providerCompletion, providerConsumer.Completion);
-
+            databaseInsert.CopyProvidersFromStage();
             //Insert reporting entity
             databaseInsert.InsertReportingEntity(reportingEntity);
             return rateCount;
@@ -90,7 +90,23 @@ namespace TiCRateParser
 
         public async Task<int> ImportUrlsGzip(string[] urls)
         {
-            throw new NotImplementedException();
+            int totalCount = 0;
+            foreach (var url in urls)
+            {
+                //Read File
+                try
+                {
+                    using JsonTextReader jsonReader = await urlReader.DownloadFile(url);
+                    int rateCount = await ImportRatesFromStream(jsonReader);
+                    logger.LogInformation($"Inserted {rateCount} rates for file: {url}");
+                    totalCount += rateCount;
+                }
+                catch (Exception e)
+                {
+                    logger.LogError(e, $"Unhandled exception in parsing {url}");
+                }
+            }
+            return totalCount;
         }
 
         public async Task<string[]> ParseIndex(string indexUrl)

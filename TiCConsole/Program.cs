@@ -67,9 +67,13 @@ namespace TiCConsole
                 {
                     try
                     {
-                        await rateService.ImportFiles(new string[] { 
-                            @"c:\temp\2023-02-01_United-HealthCare-Services--Inc-_Third-Party-Administrator_EP1-50_C1_in-network-rates.json" 
+                        await rateService.ImportFiles(new string[] {
+                            @"C:\temp\rates_28_of_29.json"
                         });
+                        //await rateService.ImportUrlsGzip(new string[]
+                        //{
+                        //    @"https://anthembcbsga.mrf.bcbs.com/2023-02_510_01B0_in-network-rates_28_of_29.json.gz?&Expires=1679603545&Signature=bVYh7actTMpOWJ-m0oc3gOR1WQQQKmsv-lIickn-wMcxn7e5kaAF9-pDYHW7ygu4GfxD-rSD2-5p6ZzWPUSYl-xZkt8dylN1KyJzcnK3owt~3sCLHhA7QhPpC3Xk3AUc6RiRhrp~8dhafXsP11pW~lwrZB3F-UlbA664uReBp1pQH4O4Dxvr3KMtrRKkK5TQmdINGcJcy7579SGp51lFMtvSeDTjXcX1A8zMn0EivJh45~YLRagqcF5ChwtMR6dtHKtJPQY1I3sTCIK2a6dA0XUZ5QYjUAk7fLfxErZLNR3QY9lXtMAeM3w6uN7EmZhe07ehQ7rcR5sOEkLAMr6IfQ__&Key-Pair-Id=K27TQMT39R1C8A"
+                        //});
                     }
                     catch (Exception ex)
                     {

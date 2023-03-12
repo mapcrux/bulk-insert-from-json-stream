@@ -14,7 +14,7 @@ namespace TiCRateParser
 {
     public interface IProviderParser
     {
-        IEnumerable<Provider> ParseProviderGroups(JObject jsonNode);
+        IEnumerable<Provider> ParseProviderGroups(IEnumerable<JToken> provider_groups);
         Dictionary<string, IEnumerable<Guid>> ParseProviderArray(ITargetBlock<Provider> providerTarget, JsonTextReader jsonReader);
     }
     public class ProviderParser : IProviderParser
@@ -35,33 +35,31 @@ namespace TiCRateParser
                 if (jsonReader.TokenType != JsonToken.StartObject) continue;
                 var providerGroupsNode = jsonSerializer.Deserialize<JObject>(jsonReader);
                 var provider_group_id = providerGroupsNode?.GetValue("provider_group_id")?.Value<string>();
-                var providerGroups = ParseProviderGroups(providerGroupsNode);
-                foreach (var provider in providerGroups)
+                if (providerGroupsNode.ContainsKey("provider_groups") && providerGroupsNode["provider_groups"].Type == JTokenType.Array)
                 {
-                    providerTarget.Post(provider);
-                }
-                if(!string.IsNullOrEmpty(provider_group_id) && !providerDict.ContainsKey(provider_group_id))
-                {
-                    providerDict[provider_group_id] = providerGroups.Select(x => x.Id);
+                    var providerGroups = ParseProviderGroups(providerGroupsNode["provider_groups"]?.AsEnumerable());
+                    foreach (var provider in providerGroups)
+                    {
+                        providerTarget.Post(provider);
+                    }
+                    if (!string.IsNullOrEmpty(provider_group_id) && !providerDict.ContainsKey(provider_group_id))
+                    {
+                        providerDict[provider_group_id] = providerGroups.Select(x => x.Id);
+                    }
                 }
             }
             return providerDict;
         }
 
-        public IEnumerable<Provider> ParseProviderGroups(JObject node)
+        public IEnumerable<Provider> ParseProviderGroups(IEnumerable<JToken> provider_groups)
         {
-
             List<Provider> providers = new List<Provider>();
-            if (node.ContainsKey("provider_groups") && node["provider_groups"].Type == JTokenType.Array)
+            foreach (var provider_group in provider_groups)
             {
-                var provider_groups = node["provider_groups"].AsEnumerable();
-                foreach (var provider_group in provider_groups)
+                if (provider_group.Type == JTokenType.Object)
                 {
-                    if (provider_group.Type == JTokenType.Object)
-                    {
-                        Provider provider = ParseProviderGroup(provider_group as JObject);
-                        providers.Add(provider);
-                    }
+                    Provider provider = ParseProviderGroup(provider_group as JObject);
+                    providers.Add(provider);
                 }
             }
             return providers;

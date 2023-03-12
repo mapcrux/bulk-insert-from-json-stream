@@ -72,9 +72,9 @@ namespace TiCRateParser
                                 providerDict[x.Value<string>()] : new Guid[0])
                                 .SelectMany(x => x);
                         }
-                        else if (provider_groups != null)
+                        else if (provider_groups != null && provider_groups.Type == JTokenType.Array)
                         {
-                            var providerGroups = providerParser.ParseProviderGroups(provider_groups as JObject);
+                            var providerGroups = providerParser.ParseProviderGroups(provider_groups.AsEnumerable());
                             foreach (var provider in providerGroups)
                             {
                                 providerTarget.Post(provider);
