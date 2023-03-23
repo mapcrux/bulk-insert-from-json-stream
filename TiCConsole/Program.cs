@@ -27,7 +27,7 @@ namespace TiCConsole
                     services.AddSingleton<IRateParser, RateParser>();
                     services.AddSingleton<IDatabaseInsert>(x => new DatabaseInsert(
                         x.GetService<ILogger<DatabaseInsert>>(),
-                        "Data Source=(localdb)\\MSSQLLocalDB;Initial Catalog=Rates;Integrated Security=True"
+                        "Server=localhost;Database=UH_POS;Trusted_Connection=True;"
                         ));
                 })
                 .ConfigureLogging((_, logging) =>
@@ -66,7 +66,7 @@ namespace TiCConsole
                     try
                     {
                         await rateService.ImportFiles(new string[] {
-                            @"C:\temp\2023-02-01_United-HealthCare-Services--Inc-_Third-Party-Administrator_EP1-50_C1_in-network-rates.json"
+                            @"N:\N_TiC\Downloads\OH_BCCMMEDCL00.json"
                         });
                         //await rateService.ImportUrlsGzip(new string[]
                         //{

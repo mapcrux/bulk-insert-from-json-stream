@@ -32,7 +32,7 @@ namespace TiCRateParser
         public DatabaseInsert(ILogger<DatabaseInsert> logger)
         {
             this.logger = logger;
-            connectionString = "Data Source=(localdb)\\MSSQLLocalDB;Initial Catalog=Rates;Integrated Security=True";
+            connectionString = "Server=localhost;Database=UH_POS;Trusted_Connection=True;";
         }
 
         public DatabaseInsert(ILogger<DatabaseInsert> logger, string connectionString)
