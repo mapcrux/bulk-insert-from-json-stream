@@ -9,6 +9,11 @@ using System.Threading.Tasks;
 
 namespace TiCRateParser
 {
+    public class RateSection
+    {
+        public List<Rate> rates = new List<Rate>();
+        public List<Provider> providers = new List<Provider>(); 
+    }
 
     public class ReportingEntity
     {

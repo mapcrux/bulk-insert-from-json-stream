@@ -1,10 +1,13 @@
 ﻿using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.Metrics;
+using System.IO;
 using System.Linq;
+using System.Reflection.Metadata.Ecma335;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 
@@ -12,7 +15,7 @@ namespace TiCRateParser
 {
     public interface IRateService
     {
-        Task<int> ImportUrlsGzip(string[] urls);
+        //Task<int> ImportUrlsGzip(string[] urls);
         Task<int> ImportFiles(string[] filePaths);
         Task<string[]> ParseIndex(string indexUrl);
     }
@@ -20,16 +23,12 @@ namespace TiCRateParser
     public class RateService : IRateService
     {
         private readonly ILogger logger;
-        private IRateUrlReader urlReader;
-        private IRateFileReader fileReader;
         private IDatabaseInsert databaseInsert;
         private IRateReader rateReader;
 
-        public RateService(ILogger<RateService> logger, IRateUrlReader rateUrlReader, IRateFileReader fileReader, IDatabaseInsert databaseInsert, IRateReader rateReader)
+        public RateService(ILogger<RateService> logger, IDatabaseInsert databaseInsert, IRateReader rateReader)
         {
             this.logger = logger;
-            this.urlReader = rateUrlReader;
-            this.fileReader = fileReader;
             this.databaseInsert = databaseInsert;
             this.rateReader = rateReader;
         }
@@ -42,8 +41,11 @@ namespace TiCRateParser
                 //Read File
                 try
                 {
-                    using JsonTextReader jsonReader = await fileReader.ReadFile(file);
-                    int rateCount = await ImportRatesFromStream(jsonReader);
+                    using var fileStream = File.OpenRead(file);
+                    using var fp = new FilePrep(fileStream);
+                    var fileInfo = await fp.PrepareFile();
+                    databaseInsert.InsertReportingEntity(rateReader.ParsePreamble(fileInfo));
+                    int rateCount = await ImportRatesFromStream(fileInfo);
                     logger.LogInformation($"Inserted {rateCount} rates for file: {file}");
                     totalCount += rateCount;
                 }
@@ -55,7 +57,7 @@ namespace TiCRateParser
             return totalCount;
         }
 
-        private async Task<int> ImportRatesFromStream(JsonTextReader jsonReader)
+        private async Task<int> ImportRatesFromStream(FileInfo fileInfo)
         {
             int rateCount = 0;
             // Rate Pipeline Setup
@@ -77,37 +79,35 @@ namespace TiCRateParser
             providerBuffer.LinkTo(providerConsumer);
             var providerCompletion = providerBuffer.Completion.ContinueWith(delegate { providerConsumer.Complete(); });
             //Start Parsing
-            var reportingEntity = await rateReader.ParseStream(jsonReader, providerBuffer, rateBuffer);
-
+            await rateReader.ParseStream(providerBuffer, rateBuffer, fileInfo);
             providerBuffer.Complete();
             rateBuffer.Complete();
             Task.WaitAll(rateCompletion, rateConsumer.Completion, providerCompletion, providerConsumer.Completion);
             databaseInsert.CopyProvidersFromStage();
             //Insert reporting entity
-            databaseInsert.InsertReportingEntity(reportingEntity);
             return rateCount;
         }
 
-        public async Task<int> ImportUrlsGzip(string[] urls)
-        {
-            int totalCount = 0;
-            foreach (var url in urls)
-            {
-                //Read File
-                try
-                {
-                    using JsonTextReader jsonReader = await urlReader.DownloadFile(url);
-                    int rateCount = await ImportRatesFromStream(jsonReader);
-                    logger.LogInformation($"Inserted {rateCount} rates for file: {url}");
-                    totalCount += rateCount;
-                }
-                catch (Exception e)
-                {
-                    logger.LogError(e, $"Unhandled exception in parsing {url}");
-                }
-            }
-            return totalCount;
-        }
+        //public async Task<int> ImportUrlsGzip(string[] urls)
+        //{
+        //    int totalCount = 0;
+        //    foreach (var url in urls)
+        //    {
+        //        //Read File
+        //        try
+        //        {
+        //            using Newtonsoft.Json.JsonTextReader jsonReader = await urlReader.DownloadFile(url);
+        //            int rateCount = await ImportRatesFromStream(jsonReader);
+        //            logger.LogInformation($"Inserted {rateCount} rates for file: {url}");
+        //            totalCount += rateCount;
+        //        }
+        //        catch (Exception e)
+        //        {
+        //            logger.LogError(e, $"Unhandled exception in parsing {url}");
+        //        }
+        //    }
+        //    return totalCount;
+        //}
 
         public async Task<string[]> ParseIndex(string indexUrl)
         {

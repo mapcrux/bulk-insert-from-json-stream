@@ -66,7 +66,6 @@ namespace TiCRateParser
             catch (Exception e)
             {
                 logger.LogError(e, "Error writing Reporting Entity to DB");
-                throw;
             }
         }
 

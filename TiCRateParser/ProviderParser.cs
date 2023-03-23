@@ -1,11 +1,10 @@
 ﻿using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
 using System.Linq;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using System.Xml.Linq;
@@ -14,67 +13,43 @@ namespace TiCRateParser
 {
     public interface IProviderParser
     {
-        IEnumerable<Provider> ParseProviderGroups(IEnumerable<JToken> provider_groups);
-        Dictionary<string, IEnumerable<Guid>> ParseProviderArray(ITargetBlock<Provider> providerTarget, JsonTextReader jsonReader);
+        IEnumerable<Provider> ParseProviderGroup(JsonNode provider_groups);
     }
     public class ProviderParser : IProviderParser
     {
         private readonly ILogger<ProviderParser> logger;
-        private readonly JsonSerializer jsonSerializer;
         public ProviderParser(ILogger<ProviderParser> logger)
         {
             this.logger = logger;
-            jsonSerializer = new JsonSerializer();
         }
 
-        public Dictionary<string, IEnumerable<Guid>> ParseProviderArray(ITargetBlock<Provider> providerTarget, JsonTextReader jsonReader)
+        public IEnumerable<Provider> ParseProviderGroup(JsonNode node)
         {
-            Dictionary<string, IEnumerable<Guid>> providerDict = new Dictionary<string, IEnumerable<Guid>>();
-            while (jsonReader.Read() && jsonReader.TokenType != JsonToken.EndArray)
-            {
-                if (jsonReader.TokenType != JsonToken.StartObject) continue;
-                var providerGroupsNode = jsonSerializer.Deserialize<JObject>(jsonReader);
-                var provider_group_id = providerGroupsNode?.GetValue("provider_group_id")?.Value<string>();
-                if (providerGroupsNode.ContainsKey("provider_groups") && providerGroupsNode["provider_groups"].Type == JTokenType.Array)
-                {
-                    var providerGroups = ParseProviderGroups(providerGroupsNode["provider_groups"]?.AsEnumerable());
-                    foreach (var provider in providerGroups)
-                    {
-                        providerTarget.Post(provider);
-                    }
-                    if (!string.IsNullOrEmpty(provider_group_id) && !providerDict.ContainsKey(provider_group_id))
-                    {
-                        providerDict[provider_group_id] = providerGroups.Select(x => x.Id);
-                    }
-                }
-            }
-            return providerDict;
-        }
 
-        public IEnumerable<Provider> ParseProviderGroups(IEnumerable<JToken> provider_groups)
-        {
             List<Provider> providers = new List<Provider>();
-            foreach (var provider_group in provider_groups)
+            var provider_groups = node?["provider_groups"]?.AsArray();
+            if (provider_groups != null && provider_groups.Count > 0)
             {
-                if (provider_group.Type == JTokenType.Object)
+                foreach (var provider_group in provider_groups)
                 {
-                    Provider provider = ParseProviderGroup(provider_group as JObject);
+                    Provider provider = ParseProvider(provider_group);
                     providers.Add(provider);
                 }
             }
             return providers;
         }
 
-        private Provider ParseProviderGroup(JObject provider_group)
+        private Provider ParseProvider(JsonNode provider_group)
         {
             try
             {
-                var npiNode = provider_group["npi"]?.AsEnumerable();
+                var tinNode = provider_group["tin"];
+                var npiNode = provider_group["npi"]?.AsArray();
                 var provider = new Provider
                 (
-                    provider_group["tin"]?["value"]?.Value<string>()?.Truncate(10),
-                    provider_group["tin"]?["type"]?.Value<string>()?.Truncate(3),
-                    npiNode != null ? npiNode.Select(x => x.Value<int>()) : new int[0]
+                    tinNode["value"]?.GetValue<string>().Truncate(10),
+                    tinNode["type"]?.GetValue<string>().Truncate(3),
+                    (npiNode != null) ? npiNode.Select(x => x.GetValue<int>()) : new int[0]
                 );
                 return provider;
             }

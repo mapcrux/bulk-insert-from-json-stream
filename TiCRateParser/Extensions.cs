@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace TiCRateParser
 {
@@ -49,6 +51,18 @@ namespace TiCRateParser
                     yield return element;
                 }
             }
+        }
+
+        public static string RemoveWhitespace(this string text)
+        {
+            return Regex.Replace(text, @"s", "");
+        }
+
+        public static bool EndsWithIgnoreCaseAndWhiteSpace(this string text, string comparison)
+        {
+            var newText = Regex.Replace(text, @"\s", "").ToLower();
+            var newComparison = Regex.Replace(comparison, @"\s", "").ToLower();
+            return newText.EndsWith(newComparison);
         }
     }
 }

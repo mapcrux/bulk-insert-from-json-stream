@@ -1,11 +1,10 @@
 ﻿using Microsoft.Extensions.Logging;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 using System.Threading.Tasks.Dataflow;
 using System.Xml.Linq;
@@ -16,85 +15,63 @@ namespace TiCRateParser
 
     public interface IRateParser
     {
-        void ParseRates(ITargetBlock<Provider> providerTarget, ITargetBlock<Rate> rateTarget, Dictionary<string,IEnumerable<Guid>> providerDict, JsonTextReader jsonReader, Guid entityId);
+        RateSection ParseRatesForCode(JsonNode node, Dictionary<string, IEnumerable<Guid>> providerDict);
     }
     public class RateParser : IRateParser
     {
 
-        private readonly JsonSerializer jsonSerializer;
         private readonly IProviderParser providerParser;
         private readonly ILogger logger;
         public RateParser(ILogger<RateParser> logger, IProviderParser providerParser)
         {
             this.logger = logger;
             this.providerParser = providerParser;
-            jsonSerializer = new JsonSerializer();
         }
-
-        public void ParseRates(ITargetBlock<Provider> providerTarget, ITargetBlock<Rate> rateTarget, Dictionary<string, IEnumerable<Guid>> providerDict, JsonTextReader jsonReader, Guid entityId)
+        public RateSection ParseRatesForCode(JsonNode node, Dictionary<string, IEnumerable<Guid>> providerDict)
         {
-            while (jsonReader.Read() && jsonReader.TokenType != JsonToken.EndArray)
-            {
-                if (jsonReader.TokenType != JsonToken.StartObject) continue;
-                var node = jsonSerializer.Deserialize<JObject>(jsonReader);
-                var rates = ParseRatesForCode(providerTarget, providerDict, entityId, node);
-                foreach(var rate in rates)
-                {
-                    rateTarget.Post(rate);
-                }
-            }
-            providerTarget.Complete();
-            rateTarget.Complete();
-        }
-
-        private IEnumerable<Rate> ParseRatesForCode(ITargetBlock<Provider> providerTarget, Dictionary<string, IEnumerable<Guid>> providerDict, Guid entityId, JObject? node)
-        {
-            List<Rate> rates = new List<Rate>();
+            RateSection rs = new RateSection();
             try
             {
-                var negotiated_arrangement = node?["negotiation_arrangement"]?.Value<string>()?.Truncate(3);
-                var billing_code = node?["billing_code"]?.Value<string>()?.Truncate(7);
-                var billing_code_type_version = node?["billing_code_type_version"]?.Value<string>()?.Truncate(10);
-                var billing_code_type = node?["billing_code_type"]?.Value<string>()?.Truncate(7);
+                var negotiated_arrangement = node?["negotiation_arrangement"]?.GetValue<string>()?.Truncate(3);
+                var billing_code = node?["billing_code"]?.GetValue<string>()?.Truncate(7);
+                var billing_code_type_version_string = node?["billing_code_type_version"]?.GetValue<string>();
+                var billing_code_type_version = node?["billing_code_type_version"]?.GetValue<string>()?.Truncate(10);
+                var billing_code_type = node?["billing_code_type"]?.GetValue<string>().Truncate(7);
                 var negotiated_rates_node = node?["negotiated_rates"];
-                if (negotiated_rates_node != null && negotiated_rates_node.Type == JTokenType.Array)
+                if (!string.IsNullOrEmpty(billing_code) && negotiated_rates_node != null)
                 {
-                    foreach (var rate_node in negotiated_rates_node.AsEnumerable())
+                    foreach (var rate_node in negotiated_rates_node.AsArray())
                     {
-                        var provider_references = rate_node?["provider_references"]?.AsEnumerable();
-                        var provider_groups = rate_node?["provider_groups"];
+                        var provider_references = rate_node?["provider_references"]?.AsArray();
+                        var provider_groups = rate_node?["provider_groups"]?.AsArray();
                         IEnumerable<Guid> pids = new List<Guid>();
                         if (provider_references != null)
                         {
-                            if (providerDict == null) continue;
-                            pids = provider_references.Select(x =>
-                                providerDict.ContainsKey(x.Value<string>()) ?
-                                providerDict[x.Value<string>()] : new Guid[0])
-                                .SelectMany(x => x);
+                            if (providerDict == null)
+                                return rs;
+                            pids = provider_references.Select(x => providerDict[x.GetValue<string>()]).SelectMany(x => x);
                         }
-                        else if (provider_groups != null && provider_groups.Type == JTokenType.Array)
+                        else if (provider_groups != null)
                         {
-                            var providerGroups = providerParser.ParseProviderGroups(provider_groups.AsEnumerable());
-                            foreach (var provider in providerGroups)
-                            {
-                                providerTarget.Post(provider);
-                            }
-                            pids = providerGroups.Select(x => x.Id);
+                            var providers = provider_groups.SelectMany(x => providerParser.ParseProviderGroup(x));
+                            pids = providers.Select(x => x.Id);
+                            rs.providers.AddRange(providers);
                         }
-                        var negotiated_prices = rate_node?["negotiated_prices"]?.AsEnumerable();
+                        var negotiated_prices = rate_node?["negotiated_prices"]?.AsArray();
                         if (negotiated_prices != null)
                         {
                             var prices = negotiated_prices.Select(x =>
                             new
                             {
-                                negotiated_type = x["negotiated_type"]?.Value<string>().Truncate(15),
-                                billing_code_modifier = string.Join(',', x["billing_code_modifier"]?.AsEnumerable()).Truncate(50),
-                                additional_information = x["additional_information"]?.Value<string>().Truncate(50),
-                                negotiated_rate = x["negotiated_rate"]?.Value<double>(),
-                                expiration_date = x["expiration_date"]?.Value<string>().ConvertDate(),
-                                billing_class = x["billing_class"]?.Value<string>().Truncate(15)
+                                negotiated_type = x["negotiated_type"]?.GetValue<string>().Truncate(15),
+                                service_code = x["service_code"]?.AsArray()?.ToJsonString().Truncate(15),
+                                billing_code_modifier = x["billing_code_modifier"]?.AsArray().ToJsonString().Truncate(50),
+                                additional_information = x["additional_information"]?.GetValue<string>().Truncate(50),
+                                negotiated_rate = x["negotiated_rate"]?.GetValue<double>(),
+                                expiration_date = x["expiration_date"]?.GetValue<string>().ConvertDate(),
+                                billing_class = x["billing_class"]?.GetValue<string>().Truncate(15)
                             });
-                            rates.AddRange(pids.SelectMany(t => prices, (t, p) => new Rate
+                            rs.rates.AddRange(pids.SelectMany(t => prices, (t, p) => new Rate
                             {
                                 BillingClass = p.billing_class,
                                 NegotiatedArrangement = negotiated_arrangement,
@@ -106,18 +83,18 @@ namespace TiCRateParser
                                 NegotiatedType = p.negotiated_type,
                                 BillingCodeModifier = p.billing_code_modifier,
                                 AdditionalInformation = p.additional_information,
-                                Provider = t,
-                                ReportingEntity = entityId
+                                Provider = t
                             }));
                         }
+
                     }
                 }
             }
-            catch (Exception e)
+            catch(Exception e)
             {
-                logger.LogDebug(e, $"Failed to parse provider");
+                logger.LogDebug(e, "Failed parsing rate for code");
             }
-            return rates;
+            return rs;
         }
     }
 }
