@@ -111,6 +111,7 @@ namespace TiCRateParser
             await destination.WriteAsync(buffer.ToArray(), 0, buffer.Count);
             buffer.Clear();
             await destination.FlushAsync();
+            destination.Close();
         }
 
         public void Dispose()

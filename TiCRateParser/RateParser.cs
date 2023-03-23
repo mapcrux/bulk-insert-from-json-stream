@@ -53,7 +53,7 @@ namespace TiCRateParser
                         }
                         else if (provider_groups != null)
                         {
-                            var providers = provider_groups.SelectMany(x => providerParser.ParseProviderGroup(x));
+                            var providers = provider_groups.Select(x => providerParser.ParseProvider(x));
                             pids = providers.Select(x => x.Id);
                             rs.providers.AddRange(providers);
                         }

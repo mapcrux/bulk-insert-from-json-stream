@@ -66,7 +66,7 @@ namespace TiCConsole
                     try
                     {
                         await rateService.ImportFiles(new string[] {
-                            @"C:\temp\2023-02-01_United-HealthCare-Services--Inc-_Third-Party-Administrator_EP1-50_C1_in-network-rates.json"
+                            @"C:\temp\2023-01-16_378_49A0_in-network-rates_36_of_84.json"
                         });
                         //await rateService.ImportUrlsGzip(new string[]
                         //{
