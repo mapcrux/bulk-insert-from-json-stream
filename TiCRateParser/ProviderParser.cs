@@ -14,6 +14,7 @@ namespace TiCRateParser
     public interface IProviderParser
     {
         IEnumerable<Provider> ParseProviderGroup(JsonNode provider_groups);
+        Provider ParseProvider(JsonNode provider_group);
     }
     public class ProviderParser : IProviderParser
     {
@@ -39,7 +40,7 @@ namespace TiCRateParser
             return providers;
         }
 
-        private Provider ParseProvider(JsonNode provider_group)
+        public Provider ParseProvider(JsonNode provider_group)
         {
             try
             {

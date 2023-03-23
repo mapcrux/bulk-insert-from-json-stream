@@ -66,7 +66,7 @@ namespace TiCConsole
                     try
                     {
                         await rateService.ImportFiles(new string[] {
-                            @"N:\N_TiC\Downloads\OH_BCCMMEDCL00.json"
+                            @"N:\N_TiC\Downloads\2023-01-01_510_01B0_in-network-rates_28_of_29.json"
                         });
                         //await rateService.ImportUrlsGzip(new string[]
                         //{
