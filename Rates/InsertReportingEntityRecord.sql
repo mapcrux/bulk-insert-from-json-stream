@@ -1,4 +1,4 @@
-﻿CREATE PROCEDURE [dbo].[UpsertReportingEntityRecord]
+﻿CREATE PROCEDURE [dbo].[InsertReportingEntityRecord]
 	@entityName varchar (100),
 	@entityNameType varchar(50),
 	@id uniqueidentifier,

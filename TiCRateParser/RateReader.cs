@@ -32,7 +32,7 @@ namespace TiCRateParser
         public ReportingEntity ParsePreamble(FileInfo fileInfo)
         {
             var reportingEntity = new ReportingEntity();
-            var preambleNode = JsonNode.Parse(fileInfo.Preamble);
+            var preambleNode = JsonNode.Parse(fileInfo.Preamble,new JsonNodeOptions { },new JsonDocumentOptions { AllowTrailingCommas = true });
             reportingEntity.Name = preambleNode?["reporting_entity_name"]?.GetValue<string>()?.Truncate(100);
             reportingEntity.Type = preambleNode?["reporting_entity_type"]?.GetValue<string>()?.Truncate(50);
             var last_updated_on_node = preambleNode?["last_updated_on"]?.GetValue<string>();
@@ -45,7 +45,6 @@ namespace TiCRateParser
 
         public async Task ParseStream(ITargetBlock<Provider> providerTarget, ITargetBlock<Rate> rateTarget, FileInfo fileInfo)
         {
-            Dictionary<string, IEnumerable<Guid>> providerDict = new Dictionary<string, IEnumerable<Guid>>();
             if (fileInfo.HasProvidersFile)
             {
                 await using var providerStream = File.OpenRead(fileInfo.ProviderProcessingPath);
@@ -54,13 +53,13 @@ namespace TiCRateParser
                 {
                     await foreach (var node in nodes)
                     {
-                        var id = node["provider_group_id"]?.GetValue<string>();
-                        if (id != null && !providerDict.ContainsKey(id))
+                        var id = node["provider_group_id"]?.ToString();
+                        if (id != null)
                         {
                             var group = providerParser.ParseProviderGroup(node);
-                            providerDict[id] = group.Select(x => x.Id);
                             foreach (var provider in group)
                             {
+                                provider.ProviderReference = id.Truncate(20);
                                 providerTarget.Post(provider);
                             }
                         }
@@ -80,7 +79,7 @@ namespace TiCRateParser
                 {
                     await foreach (JsonNode node in enumerable)
                     {
-                        var rs = rateParser.ParseRatesForCode(node, providerDict);
+                        var rs = rateParser.ParseRatesForCode(node);
                         foreach (Rate r in rs.rates)
                             rateTarget.Post(r);
                         foreach (Provider p in rs.providers)

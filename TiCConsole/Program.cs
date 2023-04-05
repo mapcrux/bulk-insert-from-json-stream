@@ -33,7 +33,8 @@ namespace TiCConsole
                 .ConfigureLogging((_, logging) =>
                 {
                     logging.ClearProviders();
-                    logging.AddSimpleConsole(options => options.IncludeScopes = true);
+                    logging.AddSimpleConsole(options => options.IncludeScopes = false);
+                    logging.SetMinimumLevel(LogLevel.Information);
                 })
                 .RunConsoleAsync();
         }
@@ -66,7 +67,9 @@ namespace TiCConsole
                     try
                     {
                         await rateService.ImportFiles(new string[] {
-                            @"C:\temp\2023-01-16_378_49A0_in-network-rates_36_of_84.json"
+                            //@"C:\Users\codet\Downloads\test.json"
+                            //@"C:\temp\2023-01-16_378_49A0_in-network-rates_36_of_84.json"
+                            @"C:\temp\2023-02-01_United-HealthCare-Services--Inc-_Third-Party-Administrator_EP1-50_C1_in-network-rates.json"
                         });
                         //await rateService.ImportUrlsGzip(new string[]
                         //{

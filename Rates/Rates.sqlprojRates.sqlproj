@@ -63,10 +63,7 @@
     <Build Include="ProviderStage.sql" />
     <Build Include="ReportingEntity.sql" />
     <Build Include="InsertReportingEntityRecord.sql" />
-    <Build Include="TruncateProviderStage.sql" />
-    <Build Include="CopyProviders.sql" />
-  </ItemGroup>
-  <ItemGroup>
-    <RefactorLog Include="Rates.refactorlog" />
+    <Build Include="CopyRatesAndProviders.sql" />
+    <Build Include="TruncateStage.sql" />
   </ItemGroup>
 </Project>

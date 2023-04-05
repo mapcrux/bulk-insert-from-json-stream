@@ -15,7 +15,7 @@ namespace TiCRateParser
 
     public interface IRateParser
     {
-        RateSection ParseRatesForCode(JsonNode node, Dictionary<string, IEnumerable<Guid>> providerDict);
+        RateSection ParseRatesForCode(JsonNode node);
     }
     public class RateParser : IRateParser
     {
@@ -27,7 +27,7 @@ namespace TiCRateParser
             this.logger = logger;
             this.providerParser = providerParser;
         }
-        public RateSection ParseRatesForCode(JsonNode node, Dictionary<string, IEnumerable<Guid>> providerDict)
+        public RateSection ParseRatesForCode(JsonNode node)
         {
             RateSection rs = new RateSection();
             try
@@ -44,19 +44,6 @@ namespace TiCRateParser
                     {
                         var provider_references = rate_node?["provider_references"]?.AsArray();
                         var provider_groups = rate_node?["provider_groups"]?.AsArray();
-                        IEnumerable<Guid> pids = new List<Guid>();
-                        if (provider_references != null)
-                        {
-                            if (providerDict == null)
-                                return rs;
-                            pids = provider_references.Select(x => providerDict[x.GetValue<string>()]).SelectMany(x => x);
-                        }
-                        else if (provider_groups != null)
-                        {
-                            var providers = provider_groups.Select(x => providerParser.ParseProvider(x));
-                            pids = providers.Select(x => x.Id);
-                            rs.providers.AddRange(providers);
-                        }
                         var negotiated_prices = rate_node?["negotiated_prices"]?.AsArray();
                         if (negotiated_prices != null)
                         {
@@ -71,22 +58,46 @@ namespace TiCRateParser
                                 expiration_date = x["expiration_date"]?.GetValue<string>().ConvertDate(),
                                 billing_class = x["billing_class"]?.GetValue<string>().Truncate(15)
                             });
-                            rs.rates.AddRange(pids.SelectMany(t => prices, (t, p) => new Rate
+                            IEnumerable<Rate> rates = new List<Rate>();
+                            if (provider_references != null)
                             {
-                                BillingClass = p.billing_class,
-                                NegotiatedArrangement = negotiated_arrangement,
-                                BillingCode = billing_code,
-                                BillingCodeType = billing_code_type,
-                                BillingCodeTypeVersion = billing_code_type_version,
-                                ExpirationDate = p.expiration_date,
-                                NegotiatedRate = p.negotiated_rate,
-                                NegotiatedType = p.negotiated_type,
-                                BillingCodeModifier = p.billing_code_modifier,
-                                AdditionalInformation = p.additional_information,
-                                Provider = t
-                            }));
+                                rates = provider_references.Select(x => x.ToString().Truncate(20))
+                                    .SelectMany(t => prices, (t, p) => new Rate
+                                    {
+                                    BillingClass = p.billing_class,
+                                    NegotiatedArrangement = negotiated_arrangement,
+                                    BillingCode = billing_code,
+                                    BillingCodeType = billing_code_type,
+                                    BillingCodeTypeVersion = billing_code_type_version,
+                                    ExpirationDate = p.expiration_date,
+                                    NegotiatedRate = p.negotiated_rate,
+                                    NegotiatedType = p.negotiated_type,
+                                    BillingCodeModifier = p.billing_code_modifier,
+                                    AdditionalInformation = p.additional_information,
+                                    ProviderReference = t
+                                });
+                            }
+                            else if (provider_groups != null)
+                            {
+                                var providers = provider_groups.Select(x => providerParser.ParseProvider(x));
+                                rates = providers.Select(x => x.Id).SelectMany(t=> prices, (t,p) => new Rate
+                                {
+                                    BillingClass = p.billing_class,
+                                    NegotiatedArrangement = negotiated_arrangement,
+                                    BillingCode = billing_code,
+                                    BillingCodeType = billing_code_type,
+                                    BillingCodeTypeVersion = billing_code_type_version,
+                                    ExpirationDate = p.expiration_date,
+                                    NegotiatedRate = p.negotiated_rate,
+                                    NegotiatedType = p.negotiated_type,
+                                    BillingCodeModifier = p.billing_code_modifier,
+                                    AdditionalInformation = p.additional_information,
+                                    Provider = t
+                                });
+                                rs.providers.AddRange(providers);
+                            }
+                            rs.rates.AddRange(rates);
                         }
-
                     }
                 }
             }

@@ -23,7 +23,7 @@ namespace TiCRateParser
         public Guid Id { get; }
         public ReportingEntity()
         {
-            Id = new Guid();
+            Id = Guid.NewGuid();
         }
     }
 
@@ -32,12 +32,14 @@ namespace TiCRateParser
         public string TIN { get; set; }
         public string TinType { get; set; }
         public IEnumerable<int> NPIs { get; set; }
+        public string? ProviderReference { get; set; }
         public readonly Guid Id;
-        public Provider(string tin, string tintype, IEnumerable<int> npis)
+        public Provider(string tin, string tintype, IEnumerable<int> npis, string? providerReference = null)
         {
             TIN = tin;
             TinType = tintype;
             NPIs = npis;
+            ProviderReference = providerReference;
             Id = this.ComputeHash();
         }
     }
@@ -56,6 +58,7 @@ namespace TiCRateParser
         public string NegotiatedArrangement { get; set; }
         public string AdditionalInformation { get; set; }
         public string BillingCodeModifier { get; set; }
+        public string ProviderReference { get; set; }
 
     }
 }

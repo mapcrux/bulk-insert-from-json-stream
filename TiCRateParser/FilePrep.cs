@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -43,75 +44,110 @@ namespace TiCRateParser
             this.providerProcessingPath = providerProcessingPath;
         }
 
-        public async Task<FileInfo> PrepareFile(int bufferSize = 50)
+        public async Task<FileInfo> PrepareFile(int bufferSize = 4096)
         {
+            using StreamReader sr = new StreamReader(source);
+            var buffer = new char[bufferSize];
             FileInfo fileInfo = new FileInfo();
-            Queue<byte> chars = new Queue<byte>();
-            List<byte> bytes = new List<byte>();
-            int current;
-            while ((current = source.ReadByte()) != -1)
-            {
-                byte b = (byte)current;
-                if (chars.Count >= bufferSize) chars.Dequeue();
-                chars.Enqueue(b);
-                bytes.Add(b);
-                var bufferText = Encoding.UTF8.GetString(bytes.ToArray());
-                if (!string.IsNullOrEmpty(bufferText) && bufferText.EndsWithIgnoreCaseAndWhiteSpace("\"in_network\":"))
+            var sb = new StringBuilder();
+            string totalString = "";
+            int current = 0;
+            bool toRead = true;
+            int currentBufferSize = 0;
+            string currentString = "";
+            while (!sr.EndOfStream || !toRead) {
+                if (toRead) {
+                    currentBufferSize = sr.ReadBlock(buffer);
+                    currentString = new string(buffer).Substring(current, currentBufferSize-current);
+                    totalString += currentString;
+                }
+                else
                 {
+                    currentString = new string(buffer).Substring(current, currentBufferSize-current);
+                    totalString += currentString;
+                }
+                int findIndexRates = totalString.IndexOf("\"in_network\":");
+                int findIndexProviders = totalString.IndexOf("\"provider_references\":");
+                if (findIndexRates != -1 && (findIndexRates < findIndexProviders || findIndexProviders < 0))
+                {
+                    var ratesIndex = currentBufferSize - (totalString.Length - (findIndexRates + 13));
+                    sb.Append(currentString.Substring(0, ratesIndex - current));
+                    sb.Append("\"\"");
                     fileInfo.HasRatesFile = true;
                     fileInfo.RateProcessingPath = rateProcessingPath;
                     var writestream = File.Create(rateProcessingPath);
-                    await TakeStreamToEndingArray(writestream);
-                    bytes.AddRange(Encoding.UTF8.GetBytes("[]"));
+                    using StreamWriter streamWriter = new StreamWriter(writestream);
+                    current = ratesIndex;
+                    totalString = "";
+                    TakeStreamToEndingArray(sr, streamWriter, buffer, ref current, ref currentBufferSize, bufferSize);
+                    streamWriter.Flush();
+                    streamWriter.Close();
+                    toRead = false;
+                    continue;
                 }
-                else if (!string.IsNullOrEmpty(bufferText) && bufferText.EndsWithIgnoreCaseAndWhiteSpace("\"provider_references\":"))
+                else if (findIndexProviders != -1 && (findIndexProviders < findIndexRates || findIndexRates < 0))
                 {
+
+                    var providersIndex = currentBufferSize - (totalString.Length - (findIndexProviders + 22));
+                    sb.Append(currentString.Substring(0, providersIndex - current));
+                    sb.Append("\"\"");
                     fileInfo.HasProvidersFile = true;
                     fileInfo.ProviderProcessingPath = providerProcessingPath;
-                    var writestream = File.Create(providerProcessingPath);
-                    await TakeStreamToEndingArray(writestream);
-                    bytes.AddRange(Encoding.UTF8.GetBytes("[]"));
+                    using var writestream = File.Create(providerProcessingPath);
+                    using StreamWriter streamWriter = new StreamWriter(writestream);
+                    current = providersIndex;
+                    totalString = "";
+                    TakeStreamToEndingArray(sr, streamWriter, buffer, ref current, ref currentBufferSize, bufferSize);
+                    streamWriter.Flush();
+                    streamWriter.Close();
+                    toRead = false;
+                    continue;
+                }
+                else
+                {
+                    sb.Append(currentString);
+                    toRead = true;
                 }
             }
-            fileInfo.Preamble = Encoding.UTF8.GetString(bytes.ToArray(), 0, bytes.Count);
+            fileInfo.Preamble = sb.ToString();
             return fileInfo;
 
         }
 
-        private async Task TakeStreamToEndingArray(Stream destination, int bufferSize = 4096)
+        private void TakeStreamToEndingArray(StreamReader sr, StreamWriter destination, char[] buffer, ref int current, ref int currentBufferSize, int bufferSize = 4096)
         {
-            Queue<byte> bytes = new Queue<byte>();
             int arraystack = 0;
-            int current;
-            List<byte> buffer = new List<byte>();
-            bool isOpen = true;
-            while ((current = source.ReadByte()) != -1 && (arraystack > 0 || isOpen))
+            bool isOpen = false;
+            bool toRead = false;
+            while (!sr.EndOfStream || !toRead)
             {
-                byte b = (byte)current;
-                if (bytes.Count >= 4) bytes.Dequeue();
-                bytes.Enqueue(b);
-                buffer.Add(b);
-                var s = Encoding.UTF8.GetString(bytes.ToArray());
-                if (s.EndsWith("["))
+                if (toRead)
                 {
-                    arraystack++;
-                    isOpen = false;
+                    current = 0;
+                    currentBufferSize = sr.ReadBlock(buffer);
                 }
-                if (s.EndsWith("]"))
+                var start = current;
+                while(current < currentBufferSize)
                 {
-                    arraystack--;
-                    if (arraystack == 0) break;
+                    if(buffer[current] == '[')
+                    {
+                        arraystack++;
+                        isOpen = true;
+                    }
+                    else if(buffer[current] == ']')
+                    {
+                        arraystack--;
+                        if (arraystack == 0 && isOpen) {
+                            destination.Write(buffer, start, current++ + 1 - start);
+                            return;
+                        }
+                    }
+                    current++;
                 }
-                if (buffer.Count >= bufferSize)
-                {
-                    await destination.WriteAsync(buffer.ToArray(), 0, buffer.Count);
-                    buffer.Clear();
-                }
+                destination.Write(buffer, start, buffer.Length-start);
+                toRead = true;
             }
-            await destination.WriteAsync(buffer.ToArray(), 0, buffer.Count);
-            buffer.Clear();
-            await destination.FlushAsync();
-            destination.Close();
+            return;
         }
 
         public void Dispose()

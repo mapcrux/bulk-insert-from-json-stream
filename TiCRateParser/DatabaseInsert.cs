@@ -19,10 +19,10 @@ namespace TiCRateParser
     public interface IDatabaseInsert
     {
         void InsertProviderSection(Provider[] providers);
-        void InsertRates(Rate[] rates);
+        void InsertRates(Rate[] rates, Guid reportingEntityId);
         void InsertReportingEntity(ReportingEntity entity);
-        void CopyProvidersFromStage();
-        void TruncateProviderStage();
+        void CopyFromStage();
+        void TruncateStage();
     }
 
     public class DatabaseInsert : IDatabaseInsert
@@ -50,7 +50,7 @@ namespace TiCRateParser
                     connection.ConnectionString = connectionString;
                     if (connection.State != ConnectionState.Open)
                         connection.Open();
-                    using (SqlCommand cmd = new SqlCommand("UpsertReportingEntityRecord", connection))
+                    using (SqlCommand cmd = new SqlCommand("InsertReportingEntityRecord", connection))
                     {
                         cmd.CommandType = CommandType.StoredProcedure;
                         cmd.Parameters.Add("@entityName", SqlDbType.VarChar).Value = entity.Name;
@@ -71,36 +71,37 @@ namespace TiCRateParser
 
         public void InsertProviderSection(Provider[] providers)
         {
-            logger.LogInformation("Inserting into Provider Staging Tables");
+            logger.LogInformation($"Inserting batch of {providers.Length} Providers");
             var providerTable = ProviderToDataTable(providers.DistinctBy(x => x.Id));
             BulkInsert(providerTable, "ProviderStage");
             var npiDataTable = NPIToDataTable(providers.DistinctBy(x => x.Id));
             BulkInsert(npiDataTable, "NPIStage");
         }
 
-        public void CopyProvidersFromStage()
+        public void CopyFromStage()
         {
-            logger.LogInformation("Copying from Provider Staging Tables");
-            CopyProviders();
-            TruncateProviderStage();
+            logger.LogInformation("Copying from Staging Tables");
+            CopyRatesAndProviders();
+            TruncateStage();
         }
 
-        public void InsertRates(Rate[] rates)
+        public void InsertRates(Rate[] rates, Guid reportingEntityId)
         {
             logger.LogInformation($"Inserting batch of {rates.Length} Rates");
-            var table = RatesToDataTable(rates);
-            BulkInsert(table, "Rates");
+            var table = RatesToDataTable(rates, reportingEntityId);
+            BulkInsert(table, "RateStage");
         }
 
-        private void CopyProviders()
+        private void CopyRatesAndProviders()
         {
             using (var connection = new SqlConnection())
             {
                 connection.ConnectionString = connectionString;
                 if (connection.State != ConnectionState.Open)
                     connection.Open();
-                using (SqlCommand cmd = new SqlCommand("CopyProviders", connection))
+                using (SqlCommand cmd = new SqlCommand("CopyRatesAndProviders", connection))
                 {
+                    cmd.CommandTimeout = 3600;
                     cmd.CommandType = CommandType.StoredProcedure;
                     int result = cmd.ExecuteNonQuery();
                     connection.Close();
@@ -108,14 +109,14 @@ namespace TiCRateParser
             }
         }
 
-        public void TruncateProviderStage()
+        public void TruncateStage()
         {
             using (var connection = new SqlConnection())
             {
                 connection.ConnectionString = connectionString;
                 if (connection.State != ConnectionState.Open)
                     connection.Open();
-                using (SqlCommand cmd = new SqlCommand("TruncateProviderStage", connection))
+                using (SqlCommand cmd = new SqlCommand("TruncateStage", connection))
                 {
                     cmd.CommandType = CommandType.StoredProcedure;
                     int result = cmd.ExecuteNonQuery();
@@ -154,17 +155,19 @@ namespace TiCRateParser
 
         private DataTable ProviderToDataTable(IEnumerable<Provider> providers)
         {
-            logger.LogInformation("Converting TINs to table");
+            logger.LogDebug("Converting TINs to table");
             DataTable table = new DataTable("ProviderStage");
             table.Columns.Add("Id", typeof(Guid));
             table.Columns.Add("Tin", typeof(string));
             table.Columns.Add("TinType", typeof(string));
+            table.Columns.Add("ProviderReference", typeof(string));
             foreach (var p in providers)
             {
                 DataRow row = table.NewRow();
                 row["Id"] = p.Id;
                 row["Tin"] = p.TIN;
                 row["TinType"] = p.TinType;
+                row["ProviderReference"] = p.ProviderReference;
                 table.Rows.Add(row);
             }
             return table;
@@ -172,7 +175,7 @@ namespace TiCRateParser
 
         private DataTable NPIToDataTable(IEnumerable<Provider> providers)
         {
-            logger.LogInformation("Converting NPI to table");
+            logger.LogDebug("Converting NPI to table");
             DataTable table = new DataTable("NPIStage");
             table.Columns.Add("Npi", typeof(int));
             table.Columns.Add("ProviderId", typeof(Guid));
@@ -189,9 +192,9 @@ namespace TiCRateParser
             return table;
         }
 
-        private DataTable RatesToDataTable(Rate[] rates)
+        private DataTable RatesToDataTable(Rate[] rates, Guid reportingEntityId)
         {
-            DataTable table = new DataTable("Rates");
+            DataTable table = new DataTable("RateStage");
             table.Columns.Add("Id", typeof(Guid));
             table.Columns.Add("ProviderId", typeof(Guid));
             table.Columns.Add("BillingCode", typeof(string));
@@ -204,6 +207,7 @@ namespace TiCRateParser
             table.Columns.Add("BillingCodeModifier", typeof(string));
             table.Columns.Add("AdditionalInformation", typeof(string));
             table.Columns.Add("ReportingEntityId", typeof(Guid));
+            table.Columns.Add("ProviderReference", typeof(string));
             foreach (var rate in rates)
             {
                 DataRow row = table.NewRow();
@@ -218,7 +222,8 @@ namespace TiCRateParser
                 row["BillingClass"] = rate.BillingClass;
                 row["BillingCodeModifier"] = rate.BillingCodeModifier;
                 row["AdditionalInformation"] = rate.AdditionalInformation;
-                row["ReportingEntityId"] = rate.ReportingEntity;
+                row["ReportingEntityId"] = reportingEntityId;
+                row["ProviderReference"] = rate.ProviderReference;
                 table.Rows.Add(row);
             }
             return table;

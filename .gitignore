@@ -13,3 +13,4 @@ obj/**/*
 **/bin
 **/.vscode
 /Rates/Rates.sqlprojRates.dbmdl
+/Rates/Rates.sqlprojRates.jfm

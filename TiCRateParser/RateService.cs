@@ -43,9 +43,11 @@ namespace TiCRateParser
                 {
                     using var fileStream = File.OpenRead(file);
                     using var fp = new FilePrep(fileStream);
+                    logger.LogInformation($"Dividing File");
                     var fileInfo = await fp.PrepareFile();
-                    databaseInsert.InsertReportingEntity(rateReader.ParsePreamble(fileInfo));
-                    int rateCount = await ImportRatesFromStream(fileInfo);
+                    var reportingEntity = rateReader.ParsePreamble(fileInfo);
+                    databaseInsert.InsertReportingEntity(reportingEntity);
+                    int rateCount = await ImportRatesFromStream(fileInfo, reportingEntity);
                     logger.LogInformation($"Inserted {rateCount} rates for file: {file}");
                     totalCount += rateCount;
                 }
@@ -57,20 +59,20 @@ namespace TiCRateParser
             return totalCount;
         }
 
-        private async Task<int> ImportRatesFromStream(FileInfo fileInfo)
+        private async Task<int> ImportRatesFromStream(FileInfo fileInfo, ReportingEntity reportingEntity)
         {
             int rateCount = 0;
             // Rate Pipeline Setup
             var rateBuffer = new BatchBlock<Rate>(50000);
             var rateConsumer = new ActionBlock<Rate[]>(rateBatch =>
             {
-                databaseInsert.InsertRates(rateBatch);
+                databaseInsert.InsertRates(rateBatch, reportingEntity.Id);
                 Interlocked.Add(ref rateCount, rateBatch.Length);
             });
             rateBuffer.LinkTo(rateConsumer);
             var rateCompletion = rateBuffer.Completion.ContinueWith(delegate { rateConsumer.Complete(); });
             // Provider Pipeline Setup
-            databaseInsert.TruncateProviderStage();
+            databaseInsert.TruncateStage();
             var providerBuffer = new BatchBlock<Provider>(50000);
             var providerConsumer = new ActionBlock<Provider[]>(providerBatch =>
             {
@@ -83,8 +85,7 @@ namespace TiCRateParser
             providerBuffer.Complete();
             rateBuffer.Complete();
             Task.WaitAll(rateCompletion, rateConsumer.Completion, providerCompletion, providerConsumer.Completion);
-            databaseInsert.CopyProvidersFromStage();
-            //Insert reporting entity
+            databaseInsert.CopyFromStage();
             return rateCount;
         }
 
